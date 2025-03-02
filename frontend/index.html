@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/src/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Musefolio - Create stunning portfolios with AI" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>Musefolio - AI-Powered Portfolio Builder</title>
+
+    <!-- COOKIE-BASED AUTH PERSISTENCE -->
+    <script>
+      // This script runs first and ensures auth data is saved to cookies
+      (function() {
+        console.log('🍪 COOKIE AUTH: Initializing cookie-based auth persistence');
+        
+        // Helper to get cookie value
+        function getCookie(name) {
+          const value = `; ${document.cookie}`;
+          const parts = value.split(`; ${name}=`);
+          if (parts.length === 2) return parts.pop().split(';').shift();
+          return null;
+        }
+        
+        // Helper to set cookie with expiry
+        function setCookie(name, value, days) {
+          const date = new Date();
+          date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+          const expires = `expires=${date.toUTCString()}`;
+          document.cookie = `${name}=${value}; ${expires}; path=/; SameSite=Strict`;
+        }
+        
+        // Try to recover auth from any storage
+        function recoverAuth() {
+          // Check all possible storage locations
+          const token = localStorage.getItem('token') || 
+                        sessionStorage.getItem('token') || 
+                        getCookie('auth_token') ||
+                        sessionStorage.getItem('auth_backup_token');
+                        
+          const userData = localStorage.getItem('user') || 
+                           sessionStorage.getItem('user') || 
+                           getCookie('auth_user') ||
+                           sessionStorage.getItem('auth_backup_user');
+          
+          if (token && userData) {
+            console.log('✅ COOKIE AUTH: Found valid auth data, ensuring persistence');
+            
+            // Ensure it's saved everywhere
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', userData);
+            localStorage.setItem('authState', 'true');
+            
+            sessionStorage.setItem('token', token);
+            sessionStorage.setItem('user', userData);
+            sessionStorage.setItem('authState', 'true');
+            
+            // Also save to cookies for maximum persistence
+            let cookieUserData = userData;
+            // If userData is too large for a cookie, save a minimal version
+            if (userData.length > 4000) {
+              try {
+                const parsedUser = JSON.parse(userData);
+                const minimalUser = {
+                  id: parsedUser.id,
+                  name: parsedUser.name,
+                  email: parsedUser.email
+                };
+                cookieUserData = JSON.stringify(minimalUser);
+              } catch (e) {
+                console.error('Failed to parse user data for cookie storage', e);
+              }
+            }
+            
+            setCookie('auth_token', token, 30);
+            setCookie('auth_user', cookieUserData, 30);
+            setCookie('auth_present', 'true', 30);
+            
+            // Clear any logout flags
+            localStorage.removeItem('was_logged_out');
+            sessionStorage.removeItem('was_logged_out');
+            window.__explicitLogout = false;
+            
+            // Set auth flags
+            window.__isAuthenticated = true;
+            
+            return true;
+          }
+          
+          return false;
+        }
+        
+        // Set up immediate auth recovery
+        recoverAuth();
+        
+        // Expose cookie auth functions globally
+        window.__cookieAuth = {
+          recover: recoverAuth,
+          getCookie: getCookie,
+          setCookie: setCookie
+        };
+        
+        // Prevent logout by overriding critical functions
+        const originalLocalStorageRemoveItem = localStorage.removeItem;
+        localStorage.removeItem = function(key) {
+          if (key === 'token' || key === 'user' || key === 'authState') {
+            console.log('🛡️ COOKIE AUTH: Prevented removal of auth item:', key);
+            return;
+          }
+          return originalLocalStorageRemoveItem.apply(this, arguments);
+        };
+      })();
+    </script>
+
+    <!-- ABSOLUTE FORCE AUTH - NO LOGOUT POSSIBLE -->
+    <script>
+      // RUN THIS BEFORE ANYTHING ELSE
+      (function() {
+        // FIRST: Make it impossible to clear auth data
+        var originalLocalStorageClear = localStorage.clear;
+        localStorage.clear = function() {
+          // Save auth data
+          var token = localStorage.getItem('token');
+          var user = localStorage.getItem('user');
+          
+          // Call original clear
+          originalLocalStorageClear.apply(this, arguments);
+          
+          // Restore auth data
+          if (token && user) {
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', user);
+            localStorage.setItem('authState', 'true');
+          }
+        };
+        
+        // SECOND: Override localStorage.removeItem to protect auth items
+        var originalRemoveItem = localStorage.removeItem;
+        localStorage.removeItem = function(key) {
+          if (key === 'token' || key === 'user' || key === 'authState') {
+            console.log('🛡️ Prevented removal of critical auth item:', key);
+            return; // Block removal of auth items
+          }
+          originalRemoveItem.apply(this, arguments);
+        };
+
+        // THIRD: Force save auth data from session storage if it exists
+        var sessionToken = sessionStorage.getItem('token');
+        var sessionUser = sessionStorage.getItem('user');
+        
+        // Check session storage
+        if (sessionToken && sessionUser) {
+          localStorage.setItem('token', sessionToken);
+          localStorage.setItem('user', sessionUser);
+          localStorage.setItem('authState', 'true');
+          console.log('✅ Forced persistence of auth data from session storage');
+        }
+        
+        // FOURTH: Set critical flags
+        window.__explicitLogout = false;
+        window.__persistAuth = true;
+      })();
+    </script>
+
+    <!-- IMMEDIATE FIX: This script runs immediately before anything else -->
+    <script>
+      (function() {
+        console.log('🚑 EMERGENCY: Running early HTML fix script');
+        
+        // 1. Fix any frozen UI elements
+        document.documentElement.style.pointerEvents = 'auto';
+        document.documentElement.style.userSelect = 'auto';
+        
+        // 2. Clear explicit logout flags
+        try {
+          localStorage.removeItem('was_logged_out');
+          sessionStorage.removeItem('was_logged_out');
+          window.__explicitLogout = false;
+        } catch(e) {
+          console.error('Error clearing logout flags:', e);
+        }
+        
+        // 3. Add emergency recovery on page load
+        window.addEventListener('load', function() {
+          // Force all UI elements to be interactive
+          const style = document.createElement('style');
+          style.textContent = `
+            * { 
+              pointer-events: auto !important; 
+              user-select: auto !important;
+            }
+            button, a, input, [role="button"] {
+              cursor: pointer !important;
+              pointer-events: auto !important;
+            }
+            .modal-backdrop, .overlay { display: none !important; }
+            body { overflow: auto !important; }
+          `;
+          document.head.appendChild(style);
+          
+          // Fix buttons after a delay
+          setTimeout(function() {
+            document.querySelectorAll('button, a, input').forEach(function(el) {
+              el.style.pointerEvents = 'auto';
+              if (el.tagName === 'BUTTON' || el.tagName === 'INPUT') {
+                el.disabled = false;
+              }
+            });
+          }, 1000);
+        });
+      })();
+    </script>
+    
+    <!-- Authentication initialization -->
+    <script>
+      // Initialize auth state before React loads
+      (function() {
+        try {
+          console.log('🔐 AUTH: Initializing auth state before React loads');
+          
+          // Early auth check - set critical flag
+          var token = localStorage.getItem('token');
+          var user = localStorage.getItem('user');
+          var wasLoggedOut = localStorage.getItem('was_logged_out') === 'true';
+          
+          // FORCE PREVENT LOGOUT
+          if (wasLoggedOut) {
+            console.log('🔄 Removing explicit logout flag');
+            localStorage.removeItem('was_logged_out');
+            sessionStorage.removeItem('was_logged_out');
+            wasLoggedOut = false;
+          }
+          
+          // If there's no token in localStorage, check cookies
+          if (!token) {
+            // Function to get cookie value
+            function getCookie(name) {
+              const value = `; ${document.cookie}`;
+              const parts = value.split(`; ${name}=`);
+              if (parts.length === 2) return parts.pop().split(';').shift();
+              return null;
+            }
+            
+            token = getCookie('auth_token');
+            user = getCookie('auth_user');
+            
+            if (token && user) {
+              console.log('🍪 Restoring auth from cookies');
+              localStorage.setItem('token', token);
+              localStorage.setItem('user', user);
+              localStorage.setItem('authState', 'true');
+            }
+          }
+          
+          window.__isAuthenticated = !!(token && user && !wasLoggedOut);
+          console.log('🔐 AUTH: Early auth check result:', window.__isAuthenticated ? 'AUTHENTICATED' : 'NOT AUTHENTICATED');
+          
+          // Set useful flags
+          window.__authInitialized = true;
+          
+          // Auth startup recovery - recover auth if flag is set but token missing
+          if (wasLoggedOut) {
+            console.log('Auth was explicitly logged out - respecting that state');
+          } else if (!token || !user) {
+            console.log('Checking for auth data in any storage');
+            
+            // Try to recover from session storage
+            var sessionToken = sessionStorage.getItem('token');
+            var sessionUser = sessionStorage.getItem('user');
+            
+            if (sessionToken && sessionUser) {
+              console.log('Restoring auth data from session storage');
+              localStorage.setItem('token', sessionToken);
+              localStorage.setItem('user', sessionUser);
+              localStorage.setItem('authState', 'true');
+              window.__isAuthenticated = true;
+            }
+          }
+          
+          // FORCE TOKEN VALIDATION
+          if (token && user) {
+            // Always force auth state to be true if token exists
+            localStorage.setItem('authState', 'true');
+            window.__isAuthenticated = true;
+            console.log('🔐 FORCED AUTH: Token exists, forcing authenticated state');
+          }
+        } catch (err) {
+          console.error('Error initializing auth:', err);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

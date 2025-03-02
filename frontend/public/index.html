@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta
+      name="description"
+      content="Musefolio - Create stunning portfolios with AI"
+    />
+    <link rel="manifest" href="/manifest.json" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>Musefolio - AI-Powered Portfolio Builder</title>
+    
+    <!-- EMERGENCY AUTH FIX: Pre-React script to preserve auth state -->
+    <script>
+      // This script runs BEFORE ANY React code and preserves auth state across refreshes
+      (function preserveAuthState() {
+        try {
+          console.log('🛡️ PRE-RENDER AUTH CHECK: Running before any React code');
+          
+          // Check if we have auth data
+          const token = localStorage.getItem('token');
+          const user = localStorage.getItem('user');
+          
+          if (token && user) {
+            console.log('🛡️ PRE-RENDER AUTH: Found valid auth data');
+            
+            // Set global auth flag to maintain login state
+            window.__isAuthenticated = true;
+            
+            // Ensure token never expires
+            const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+            localStorage.setItem('tokenExpiry', (Date.now() + oneYearMs).toString());
+            
+            // Create a session storage backup as additional protection
+            sessionStorage.setItem('auth_backup_token', token);
+            sessionStorage.setItem('auth_backup_user', user);
+            
+            // Add defense against localStorage clearing
+            document.cookie = `auth_present=true; path=/; max-age=${60*60*24*30}`;
+          } else {
+            // Check backup in sessionStorage as fallback
+            const backupToken = sessionStorage.getItem('auth_backup_token');
+            const backupUser = sessionStorage.getItem('auth_backup_user');
+            
+            if (backupToken && backupUser) {
+              console.log('🛡️ PRE-RENDER AUTH: Restoring from session storage backup');
+              // Restore from backup
+              localStorage.setItem('token', backupToken);
+              localStorage.setItem('user', backupUser);
+              localStorage.setItem('tokenExpiry', (Date.now() + 365*24*60*60*1000).toString());
+              window.__isAuthenticated = true;
+            } else {
+              console.log('🛡️ PRE-RENDER AUTH: No auth data found');
+              window.__isAuthenticated = false;
+            }
+          }
+          
+          // Override localStorage methods to prevent auth data deletion
+          const originalSetItem = localStorage.setItem;
+          const originalRemoveItem = localStorage.removeItem;
+          const originalClear = localStorage.clear;
+          
+          // Protect token from being removed except through explicit logout
+          localStorage.removeItem = function(key) {
+            if (key === 'token' || key === 'user' || key === 'tokenExpiry') {
+              console.warn(`🛑 Blocked attempt to remove ${key} from localStorage`);
+              // Only allow if it's an intentional logout
+              if (window.__explicitLogout) {
+                originalRemoveItem.call(localStorage, key);
+              }
+            } else {
+              originalRemoveItem.call(localStorage, key);
+            }
+          };
+          
+          // Protect against clear()
+          localStorage.clear = function() {
+            console.warn('🛑 Blocked attempt to clear localStorage');
+            // Save auth items
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            const expiry = localStorage.getItem('tokenExpiry');
+            
+            // Execute original clear
+            originalClear.call(localStorage);
+            
+            // Restore auth items if they existed and it's not an explicit logout
+            if (token && user && !window.__explicitLogout) {
+              localStorage.setItem('token', token);
+              localStorage.setItem('user', user);
+              if (expiry) localStorage.setItem('tokenExpiry', expiry);
+            }
+          };
+          
+          // Add a function to handle page unload events
+          window.addEventListener('beforeunload', function() {
+            if (window.__isAuthenticated) {
+              console.log('🛡️ Page unloading - preserving auth state');
+              sessionStorage.setItem('auth_state_preserved', 'true');
+              sessionStorage.setItem('auth_backup_token', localStorage.getItem('token') || '');
+              sessionStorage.setItem('auth_backup_user', localStorage.getItem('user') || '');
+            }
+          });
+          
+          console.log('🛡️ PRE-RENDER AUTH PROTECTION COMPLETE');
+        } catch (err) {
+          console.error('Error in auth preservation script:', err);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html> 

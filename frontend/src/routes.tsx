@@ -1,5 +1,5 @@
-import React, { Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Landing from './pages/landing/Landing';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -8,14 +8,60 @@ import Dashboard from './pages/dashboard/Dashboard';
 import PortfolioEditor from './pages/editor/PortfolioEditor';
 import PortfolioPreview from './pages/preview/PortfolioPreview';
 import ProjectEditor from './pages/editor/ProjectEditor';
-import { isAuthenticated } from './services/auth'; // Import our auth service
+import { useAuth } from './contexts/AuthContext';
 
 // Protected Route component
 const ProtectedRoute: React.FC<{ element: React.ReactElement }> = ({ element }) => {
-  // Use our auth service's isAuthenticated function instead of just checking localStorage
-  const authenticated = isAuthenticated();
-  console.log('🔒 ProtectedRoute: Authentication check result:', authenticated);
-  return authenticated ? element : <Navigate to="/login" />;
+  const { isAuthenticated, isLoading, refreshUserData } = useAuth();
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(true);
+  
+  useEffect(() => {
+    // Check authentication status directly with the server
+    const verifyAuth = async () => {
+      try {
+        // Refresh user data to ensure we have the latest authentication state
+        await refreshUserData();
+        setChecking(false);
+      } catch (error) {
+        console.error('Authentication verification failed:', error);
+        // If verification fails, consider not authenticated
+        setChecking(false);
+      }
+    };
+    
+    verifyAuth();
+  }, [refreshUserData]);
+  
+  // Show a loading state while authentication is being checked
+  if (isLoading || checking) {
+    return (
+      <div style={{ 
+        height: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        fontSize: '1.5rem',
+        color: '#666',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <div>Checking authentication...</div>
+        <div style={{ width: '50px', height: '50px', border: '5px solid #f3f3f3', borderTop: '5px solid #3498db', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+        <style>
+          {`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}
+        </style>
+      </div>
+    );
+  }
+  
+  // Once loading is done, check if authenticated
+  return isAuthenticated ? element : <Navigate to="/login" state={{ from: window.location.pathname }} />;
 };
 
 const AppRoutes: React.FC = () => {

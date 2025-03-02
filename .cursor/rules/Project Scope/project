@@ -1,0 +1,130 @@
+Build a scalable, modular platform where users create profession-specific portfolios with AI-guided design. Prioritize a frictionless editor (like Wix but niche-focused), dynamic CV/portfolio sync, and subdomain flexibility. Ensure cross-platform responsiveness and integrate key learnings from UXFolio (case studies) and Dribbble (visual polish). Include GDPR compliance, SSO options
+
+MuseFolio is a dynamic, all-in-one platform for professionals to create, customize, and publish polished CVs and portfolios. It combines AI-driven template suggestions (tailored to professions like software development, graphic design, architecture, etc.), deep customization (layouts, themes, UX), and dynamic content management (projects, CV fields, media). Users register, input professional details, and instantly publish their portfolio on a custom subdomain (e.g., john.musefolio.com or johndoe.com via domain mapping).
+
+project templates (1.	Architecture
+	•	Content: Project descriptions, design philosophies, technical drawings, and client testimonials.
+	•	Media: High-resolution images of completed structures, 3D renderings, virtual walkthroughs, and time-lapse construction videos.
+	2.	Product Design
+	•	Content: Design briefs, user research summaries, prototype development stages, and manufacturing processes.
+	•	Media: Photographs of prototypes, CAD models, exploded view diagrams, and user interaction videos.
+	3.	Graphic Design
+	•	Content: Brand identity projects, typography explorations, packaging designs, and advertising campaigns.
+	•	Media: Digital mockups, vector illustrations, print-ready PDFs, and interactive design showcases.
+	4.	Software Engineering
+	•	Content: Project overviews, code repositories, algorithm explanations, and system architecture diagrams.
+	•	Media: Screenshots of applications, demo videos, interactive code snippets, and API documentation.
+	5.	Photography
+	•	Content: Curated photo series, exhibition statements, client project descriptions, and technical setup details.
+	•	Media: High-resolution image galleries, behind-the-scenes videos, and interactive slideshows.
+	6.	Interior Design
+	•	Content: Design concepts, mood boards, space planning layouts, and material selection rationale.
+	•	Media: Before-and-after photos, 3D interior renderings, virtual tours, and sample boards.
+	7.	Fashion Design
+	•	Content: Collection overviews, fabric selection justifications, design sketches, and trend analyses.
+	•	Media: Runway show videos, lookbook images, textile swatches, and pattern drafts.
+	8.	Digital Marketing
+	•	Content: Campaign case studies, SEO strategies, content calendars, and performance analytics.
+	•	Media: Infographics, social media post examples, video advertisements, and web traffic dashboards.
+	9.	Writing and Editing
+	•	Content: Published articles, manuscript edits, content strategy outlines, and genre-specific writing samples.
+	•	Media: PDFs of written work, links to online publications, annotated drafts, and audio narrations.
+	10.	Videography
+	•	Content: Project synopses, shot lists, storyboards, and client feedback summaries.
+	•	Media: Highlight reels, full-length videos, behind-the-scenes footage, and equipment setup images.
+	11.	Web Development
+	•	Content: Website project summaries, code samples, user experience research, and responsive design showcases.
+	•	Media: Live site links, development screenshots, interactive prototypes, and performance metrics.
+	12.	Illustration
+	•	Content: Project backgrounds, character development sketches, thematic series descriptions, and client commissions.
+	•	Media: High-resolution scans, time-lapse creation videos, digital art files, and print-ready illustrations.
+	13.	Advertising
+	•	Content: Campaign objectives, target audience analyses, creative briefs, and media placement strategies.
+	•	Media: Ad mockups, commercial videos, billboard designs, and performance analytics.
+	14.	Public Relations
+	•	Content: Press release samples, crisis communication plans, media outreach summaries, and event recaps.
+	•	Media: Clippings of media coverage, event photographs, interview recordings, and press kit materials.
+	15.	Education
+	•	Content: Curriculum vitae, teaching philosophies, lesson plans, and student feedback summaries.
+	•	Media: Classroom videos, educational material PDFs, interactive lesson demonstrations, and certification scans.
+	16.	Journalism
+	•	Content: Investigative reports, feature stories, interview transcripts, and editorial pieces.
+	•	Media: Published article links, video reports, podcast episodes, and photojournalism galleries.
+	17.	Culinary Arts
+	•	Content: Recipe developments, menu designs, culinary event plans, and food styling projects.
+	•	Media: Food photography, cooking demonstration videos, plating presentations, and kitchen setup images.
+	18.	Event Planning
+	•	Content: Event proposals, budget breakdowns, vendor coordination plans, and client testimonials.
+	•	Media: Event setup photos, time-lapse videos of preparations, design mockups, and attendee feedback forms.
+	19.	Human Resources
+	•	Content: Recruitment strategies, training program outlines, policy documents, and performance evaluation methods.
+	•	Media: Flowcharts, presentation slides, workshop videos, and employee engagement metrics.
+	20.	Consulting
+	•	Content: Client case studies, strategic plans, market research reports, and process improvement analyses.
+	•	Media: Graphs and charts, client testimonials, process diagrams, and presentation decks.)
+
+Core Features
+Registration & Profile Setup
+
+Social media/email signup.
+
+Step-by-step wizard to collect:
+
+Basic info (name, contact, profession).
+
+Career summary, skills, education, work experience.
+
+Portfolio goals (job search, freelance showcase, client pitching).
+
+Profession-Specific Template System
+
+Research-backed templates for 20+ professions (e.g., UX design, engineering, marketing):
+
+Analyze platforms like UXFolio (case-study focus), Dribbble (visual-heavy), Behance (project narratives), and Wix (modularity).
+
+Example: A "Software Developer" template emphasizes code snippets, GitHub integration, and project documentation.
+
+
+Dynamic Content Engine
+
+Smart CV Builder:
+
+Auto-fill sections via LinkedIn import or manual entry.
+
+Dynamic fields (e.g., "Projects" updates both CV and portfolio simultaneously).
+
+Portfolio Projects:
+
+Upload images, videos, PDFs, GIFs, 3D models.
+
+Add case studies with customizable sections (Problem, Solution, Impact). text, media, link..... dragging and order arrangement, and other content and media layout and position mgt
+
+Design & UX Customization
+
+Canvas Editor: Drag-and-drop blocks (text, media, grids, sliders) with real-time preview.
+
+Theme Studio:
+
+Color palettes (preset or HEX/RGB).
+
+Font pairings (Google Fonts integration).
+
+Layouts (single-page, multi-page, vertical/horizontal scroll).
+
+Responsive Design: Auto-optimize for mobile/desktop.
+
+Subdomain & Domain Management
+
+@curserrule.mdc  Auto-generate subdomains (e.g., username.musefolio.com).
+
+Custom subdomain selector (users can claim johndesigns.musefolio.com).
+
+Custom domain support (connect johnsmith.com via DNS).
+
+Publishing & Sharing
+
+One-click publish with SEO optimization (meta tags, alt text).
+
+Export as PDF (CV) or static site (HTML/CSS).
+
+Share via link, QR code, or embedded widgets.

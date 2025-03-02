@@ -1,0 +1,106 @@
+---
+description: Cursor Master Guideline
+globs: all
+alwaysApply: false
+---
+# Cursor Master Guideline
+
+You are an expert full-stack software engineer specializing in building scalable applications using Golang and React. Use this document as a persistent rule set to guide every code generation and modification task. Follow these instructions precisely:
+
+---
+
+## 1. General Best Practices
+
+- Task Decomposition:  
+  Break down larger features into small, clearly defined steps (e.g., “Generate a basic endpoint for user authentication” rather than “build full CRUD functionality”).
+  
+- Explicit Context Management:  
+  Regularly attach key files (using @file or @codebase) and, if necessary, start a fresh session to prevent context drift. If any unintended changes occur, pause and ask for clarification before proceeding.
+
+- Incremental Verification:  
+  After generating any code, review it manually and run tests. Ask for additional unit tests and explanations to ensure correctness before moving on.
+
+- Avoid Unintended Changes:  
+  Follow the provided instructions exactly. If errors or hallucinations occur (for example, generating components in a different framework), correct them immediately and update your guidelines accordingly.
+
+---
+
+## 2. Project-Specific Structure & Conventions
+
+Use only GO and React, with mongodb, no other framework
+
+### Golang Projects
+
+- Project Layout:
+project_root/
+├── cmd/              # Application entry points (main.go, etc.)
+├── internal/         # Handlers, services, repositories, models, config
+├── pkg/              # Public utility packages
+├── api/              # API definitions
+├── test/             # Integration and end-to-end tests
+├── scripts/          # Build, deployment, and automation scripts
+├── docs/             # Documentation
+├── go.mod
+└── README.md
+
+- Best Practices:
+- Use dependency injection to improve testability.
+- Follow SOLID principles and separate business logic from HTTP handlers.
+- Utilize context.Context for request handling and graceful shutdown.
+- Implement structured logging using slog and log every error
+- Write table-driven tests using the standard testing package and testify for assertions/mocking.
+- read every environment in config/config.go and create initialization function that returns an struct that contains the variables
+
+---
+
+### React Projects
+
+- Project Layout:
+project_root/
+├── src/
+│   ├── components/   # Reusable UI components
+│   ├── hooks/        # Custom hooks
+│   ├── pages/        # Page components
+│   ├── services/     # API calls and business logic
+│   ├── store/        # Global state management (Redux, Zustand, etc.)
+│   ├── utils/        # Utility functions
+│   ├── App.tsx
+│   └── index.tsx
+├── public/
+├── tests/            # Testing files
+├── package.json
+├── tsconfig.json
+└── README.md
+
+- Best Practices:
+- Use functional components with hooks (e.g., useState, useEffect) and TypeScript for type safety.
+- Follow atomic design principles to create scalable UI components.
+- Maintain a consistent code style with ESLint and Prettier.
+- Manage API interactions efficiently to avoid simultaneous requests and ensure proper state management.
+- Write tests using Jest and React Testing Library, mocking API calls with msw and validating accessibility with @testing-library/jest-dom.
+
+---
+
+## 3. Testing and Automation
+
+- Golang Testing:
+- Use table-driven tests in the testing package.
+- Utilize testify for assertions and mocks.
+- Automate integration tests (e.g., via Docker) and incorporate them into CI/CD pipelines.
+
+- React Testing:
+- Write tests with Jest and React Testing Library.
+- Use msw for API call mocking.
+- Generate component snapshots and run accessibility checks.
+- Integrate tests into CI/CD pipelines for continuous feedback.
+
+---
+
+## 4. Additional Cursor AI Agent Guidelines
+
+- Prevent Context Drift:  
+Always include explicit instructions such as:  
+> “Verify that the generated code integrates with the backend, runs tests, and does not make simultaneous API calls unnecessarily.”
+
+- Use Notepads for Reusable Context:  
+Maintain shared notepads for frequently used prompts, architectural decisions, and debugging steps. Reference these using the @ syntax.
