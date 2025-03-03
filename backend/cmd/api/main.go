@@ -6,8 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -145,7 +144,41 @@ func main() {
 		})
 	})
 
+	// Media file server
+	fileServer := http.FileServer(http.Dir("./media"))
+	r.Get("/media/*", http.StripPrefix("/media", fileServer).ServeHTTP)
+
+	// Serve frontend static files
+	frontendFS := http.FileServer(http.Dir("../frontend/dist"))
+	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+		// For API routes, don't try to serve static files
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Try to serve the requested file
+		file := "../frontend/dist" + r.URL.Path
+		_, err := os.Stat(file)
+
+		// If file exists, serve it
+		if err == nil {
+			frontendFS.ServeHTTP(w, r)
+			return
+		}
+
+		// If path doesn't exist, serve index.html for client-side routing
+		http.ServeFile(w, r, "../frontend/dist/index.html")
+	})
+
 	// Routes
+	// Add a simpler root handler that serves a plain text message
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("<html><body><h1>Musefolio API Server</h1><p>The API server is running. Please access the frontend at <a href='http://localhost:5173'>http://localhost:5173</a></p></body></html>"))
+	})
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
@@ -198,6 +231,7 @@ func main() {
 			// Add ME endpoint for current user operations
 			r.Get("/users/me", userHandler.GetCurrentUser)
 			r.Put("/users/me", userHandler.UpdateCurrentUser)
+			r.Post("/users/me/avatar", userHandler.UploadAvatar)
 
 			// Portfolio routes
 			portfolioHandler.RegisterRoutes(r)
@@ -213,48 +247,11 @@ func main() {
 		logger.Error("failed to walk routes", "error", err)
 	}
 
-	// Initialize server
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:      r,
-		ReadTimeout:  time.Second * 15,
-		WriteTimeout: time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-	}
-
-	// Channel to listen for errors coming from the listener.
-	serverErrors := make(chan error, 1)
-
 	// Start the server
-	go func() {
-		logger.Info("starting server", "port", cfg.Server.Port)
-		serverErrors <- server.ListenAndServe()
-	}()
-
-	// Channel to listen for an interrupt or terminate signal from the OS.
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
-
-	// Blocking main and waiting for shutdown.
-	select {
-	case err := <-serverErrors:
-		logger.Error("server error", "error", err)
+	port := 3000 // Changed from 8080 to 3000
+	logger.Info("starting server", slog.Int("port", port))
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), r); err != nil {
+		logger.Error("server error", slog.String("error", err.Error()))
 		os.Exit(1)
-
-	case sig := <-shutdown:
-		logger.Info("shutdown started", "signal", sig)
-		defer logger.Info("shutdown complete", "signal", sig)
-
-		// Give outstanding requests a deadline for completion.
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
-		defer cancel()
-
-		// Asking listener to shut down and shed load.
-		if err := server.Shutdown(ctx); err != nil {
-			logger.Error("graceful shutdown failed", "error", err)
-			if err := server.Close(); err != nil {
-				logger.Error("forcing server to close", "error", err)
-			}
-		}
 	}
 }

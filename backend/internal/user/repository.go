@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -106,16 +107,32 @@ func (r *Repository) Update(ctx context.Context, id primitive.ObjectID, input Up
 	if input.Password != nil {
 		update["$set"].(bson.M)["password"] = *input.Password // Note: Password should be hashed before this point
 	}
+	if input.Bio != nil {
+		update["$set"].(bson.M)["bio"] = *input.Bio
+	}
+	if input.Profession != nil {
+		update["$set"].(bson.M)["profession"] = *input.Profession
+	}
+	if input.Avatar != nil {
+		update["$set"].(bson.M)["avatar"] = *input.Avatar
+	}
+	if input.SocialLinks != nil {
+		update["$set"].(bson.M)["socialLinks"] = input.SocialLinks
+	}
+
+	log.Printf("Updating user ID: %s with data: %+v", id.Hex(), update["$set"])
 
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var user User
 	err := r.collection.FindOneAndUpdate(ctx, bson.M{"_id": id}, update, opts).Decode(&user)
 	if err != nil {
+		log.Printf("Error updating user: %v", err)
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
 		}
 		return nil, err
 	}
+	log.Printf("User updated successfully: %+v", user)
 	return &user, nil
 }
 

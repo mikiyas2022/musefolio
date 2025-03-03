@@ -8,6 +8,8 @@ import Dashboard from './pages/dashboard/Dashboard';
 import PortfolioEditor from './pages/editor/PortfolioEditor';
 import PortfolioPreview from './pages/preview/PortfolioPreview';
 import ProjectEditor from './pages/editor/ProjectEditor';
+import About from './pages/about/About';
+import CV from './pages/cv/CV';
 import { useAuth } from './contexts/AuthContext';
 
 // Protected Route component
@@ -93,6 +95,8 @@ const AppRoutes: React.FC = () => {
         <Route path="/editor/:id" element={<ProtectedRoute element={<PortfolioEditor />} />} />
         <Route path="/dashboard/projects/new" element={<ProtectedRoute element={<ProjectEditor />} />} />
         <Route path="/dashboard/projects/:id/edit" element={<ProtectedRoute element={<ProjectEditor />} />} />
+        <Route path="/about" element={<ProtectedRoute element={<About />} />} />
+        <Route path="/cv" element={<ProtectedRoute element={<CV />} />} />
       </Routes>
     </Suspense>
   );

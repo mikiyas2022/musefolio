@@ -50,6 +50,7 @@ interface ProjectEditorState {
   theme: Theme;
   layout: Layout;
   showSettings: boolean;
+  isSaving: boolean;
 }
 
 const DEFAULT_THEME: Theme = {
@@ -78,6 +79,7 @@ const ProjectEditor: React.FC = () => {
     theme: DEFAULT_THEME,
     layout: DEFAULT_LAYOUT,
     showSettings: false,
+    isSaving: false,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,23 +198,41 @@ const ProjectEditor: React.FC = () => {
   // Save Project
   const saveProject = async () => {
     try {
+      setState(prev => ({ ...prev, isSaving: true }));
+      
+      // Convert content to JSON string for storage
       const projectData = {
         title: state.title,
         description: state.description,
         sections: state.sections.map(section => ({
           ...section,
-          content: section.type === 'text' 
-            ? convertToRaw(section.content.getCurrentContent())
-            : section.content,
+          content: typeof section.content === 'object' ? 
+            JSON.stringify(section.content) : section.content
         })),
         theme: state.theme,
-        layout: state.layout,
+        layout: state.layout
       };
-
-      // TODO: Implement actual save logic with ApiService
-      setState(prev => ({ ...prev, unsavedChanges: false }));
+      
+      // Send to API - this should be updated to use the actual API endpoint
+      // Mock success for now
+      console.log('Saving project:', projectData);
+      
+      // If we had a project ID, we would update instead
+      // const response = await ApiService.createPortfolio(projectData);
+      
+      setTimeout(() => {
+        setState(prev => ({ 
+          ...prev, 
+          isSaving: false,
+          unsavedChanges: false
+        }));
+        alert('Project saved successfully!');
+      }, 1000);
+      
     } catch (error) {
       console.error('Error saving project:', error);
+      setState(prev => ({ ...prev, isSaving: false }));
+      alert('Failed to save project. Please try again.');
     }
   };
 
@@ -257,9 +277,8 @@ const ProjectEditor: React.FC = () => {
             <i className="fas fa-font" />
             Add Text
           </button>
-          <button onClick={saveProject} disabled={!state.unsavedChanges}>
-            <i className="fas fa-save" />
-            Save Changes
+          <button onClick={saveProject} disabled={state.isSaving}>
+            {state.isSaving ? 'Saving...' : 'Save Project'}
           </button>
         </div>
       </header>

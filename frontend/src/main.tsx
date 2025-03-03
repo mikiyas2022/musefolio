@@ -10,6 +10,24 @@ import App from './App'
 import { initMockServer } from './test/mockServer';
 import apiConfig from './config/apiConfig';
 
+// Initialize authentication
+initAuth();
+
+// Start mock server if in mock mode
+if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+  console.log('📊 Using mock API server');
+  initMockServer();
+}
+
+// Render the app directly without waiting for auth
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <Provider store={store}>
+      <App />
+    </Provider>
+  </React.StrictMode>
+);
+
 // AUTOMATIC FIX: This will run automatically and fix all issues
 (function() {
   console.log('🔧 AUTOMATIC REPAIR: Running complete application fix');
@@ -225,10 +243,6 @@ localStorage.setItem('apiEnvironment', 'direct');
 
 // Use direct connection to solve the proxy issues
 apiConfig.useDirectConnection();
-
-// Initialize mock server before rendering (only if explicitly enabled)
-// This will be disabled because we set useMockServer to false above
-initMockServer();
 
 // Check if we should auto-fix auth issues
 if (localStorage.getItem('token') && 

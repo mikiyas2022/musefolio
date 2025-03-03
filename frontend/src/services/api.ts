@@ -2,6 +2,21 @@ import apiConfig from '../config/apiConfig';
 import { apiRequest, formatErrorMessage, ErrorCategory, shouldUseMockMode } from '../utils/apiUtils';
 import { Portfolio, User } from '../types';
 
+// Add these declarations at the top of the file, after the imports
+declare global {
+  interface Window {
+    __authDebug?: {
+      log: string[];
+      lastAttempt: any;
+      getReport: () => string;
+    };
+    __diagnoseMissingAuth?: () => void;
+    __isAuthenticated?: boolean;
+    __explicitLogout?: boolean;
+    __authInitialized?: boolean;
+  }
+}
+
 // CRITICAL: Debug information to track auth issues
 let authDebugLog: string[] = [];
 let lastAuthAttempt: any = null;
@@ -104,18 +119,6 @@ function getAuthDebugReport(): string {
     return report;
   } catch (e) {
     return `Error generating report: ${e}`;
-  }
-}
-
-// Declare the global debug interface
-declare global {
-  interface Window {
-    __authDebug?: {
-      log: string[];
-      lastAttempt: any;
-      getReport: () => string;
-    };
-    __diagnoseMissingAuth?: () => void;
   }
 }
 
@@ -501,47 +504,74 @@ class ApiService {
 
   static async uploadAvatar(file: File) {
     try {
-      // Get current user data for ID
-      const storedUser = localStorage.getItem('user');
-      if (!storedUser) {
-        return { error: 'No user data found. Please log in again.' };
-      }
-      
-      const currentUser = JSON.parse(storedUser) as User;
-      if (!currentUser || !currentUser.id) {
-        return { error: 'Invalid user data. Please log in again.' };
-      }
-      
-      console.log('🖼️ Uploading avatar for user:', currentUser.id);
+      console.log('🖼️ Uploading avatar');
       
       const formData = new FormData();
       formData.append('avatar', file);
 
-      // Use user ID in the path instead of 'profile'
-      const updatedUser = await apiRequest<AuthResponse['user']>(`/users/${currentUser.id}/avatar`, {
+      // Use the direct API URL to avoid any path manipulation issues
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/v1/users/me/avatar', {
         method: 'POST',
         body: formData,
-        // Don't set Content-Type for FormData - browser will set it with boundary
-        headers: {},
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
       });
-      
-      // Update user in localStorage
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        user.avatar = updatedUser.avatar;
-        localStorage.setItem('user', JSON.stringify(user));
-        
-        // Add logging to verify data was saved
-        console.log('🖼️ Avatar updated successfully:', user.avatar);
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status: ${response.status}`);
       }
       
-      // Add a utility function to force UI updates directly when needed
+      const updatedUser = await response.json();
+      console.log('🖼️ Avatar updated successfully:', updatedUser.avatar);
+      
+      // Force UI update with new avatar
       this.forceUIUpdate({ avatar: updatedUser.avatar });
       
       return { data: updatedUser };
     } catch (error) {
       console.error('❌ Failed to upload avatar:', error);
+      return { error: formatErrorMessage(error) };
+    }
+  }
+
+  // Upload project image
+  static async uploadProjectImage(projectId: string, file: File) {
+    try {
+      console.log('🖼️ Uploading project image for project:', projectId);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', file.name);
+      formData.append('type', file.type);
+
+      // Get the portfolio ID from current user's portfolio
+      // Typically projectId is the portfolioId when adding a new project image
+      const portfolioId = projectId;
+      
+      // Use direct URL to avoid any path manipulation issues
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8080/api/v1/portfolios/${portfolioId}/projects/${projectId}/media`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Project image upload failed with status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('🖼️ Project image uploaded successfully', data);
+      
+      return { data: { success: true } };
+    } catch (error) {
+      console.error('❌ Failed to upload project image:', error);
       return { error: formatErrorMessage(error) };
     }
   }

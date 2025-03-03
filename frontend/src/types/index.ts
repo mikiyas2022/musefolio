@@ -34,6 +34,7 @@ export interface Portfolio {
   projects?: any[];
   subdomain?: string;
   customDomain?: string;
+  image?: string;
 }
 
 export interface PortfolioSection {

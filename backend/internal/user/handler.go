@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,7 +41,7 @@ func (h *Handler) Register(r chi.Router) {
 		// Protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(h.service.GetJWTSecret()))
-			r.Post("/profile/avatar", h.UploadAvatar)
+			r.Post("/me/avatar", h.UploadAvatar)
 			r.Put("/profile", h.UpdateProfile)
 			r.Put("/profile/social", h.UpdateSocialLinks)
 		})
@@ -327,35 +328,58 @@ func (h *Handler) UpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var input struct {
-		Name       string `json:"name"`
-		Email      string `json:"email"`
-		Profession string `json:"profession"`
-		Bio        string `json:"bio"`
-		Username   string `json:"username"`
-		Avatar     string `json:"avatar"`
+		Name        string       `json:"name"`
+		Email       string       `json:"email"`
+		Profession  string       `json:"profession"`
+		Bio         string       `json:"bio"`
+		Username    string       `json:"username"`
+		Avatar      string       `json:"avatar"`
+		SocialLinks *SocialLinks `json:"socialLinks"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		log.Printf("Error decoding request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	log.Printf("Received update request for user %s: %+v", userID.Hex(), input)
+
 	// Create update input
-	update := UpdateUserInput{
-		Name:       &input.Name,
-		Email:      &input.Email,
-		Profession: &input.Profession,
-		Bio:        &input.Bio,
-		Username:   &input.Username,
-		Avatar:     &input.Avatar,
+	update := UpdateUserInput{}
+
+	// Only update fields that were provided in the request
+	if input.Name != "" {
+		update.Name = &input.Name
+	}
+	if input.Email != "" {
+		update.Email = &input.Email
+	}
+	if input.Profession != "" {
+		update.Profession = &input.Profession
+	}
+	if input.Bio != "" {
+		update.Bio = &input.Bio
+	}
+	if input.Username != "" {
+		update.Username = &input.Username
+	}
+	if input.Avatar != "" {
+		update.Avatar = &input.Avatar
+	}
+	if input.SocialLinks != nil {
+		update.SocialLinks = input.SocialLinks
 	}
 
 	// Update user
 	user, err := h.service.Update(r.Context(), userID, update)
 	if err != nil {
+		log.Printf("Error updating user %s: %v", userID.Hex(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("User %s updated successfully", userID.Hex())
 
 	// Return updated user
 	w.Header().Set("Content-Type", "application/json")

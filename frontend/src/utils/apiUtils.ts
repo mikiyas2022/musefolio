@@ -1,9 +1,9 @@
 import apiConfig from '../config/apiConfig';
 
-// Constants for API URLs
-const API_BASE_URL = '/api/v1';
+// Constants for API URLs - FIXED TO ALWAYS USE DIRECT CONNECTION
+const API_BASE_URL = 'http://localhost:8080/api/v1';
 const API_BASE_URL_DIRECT = 'http://localhost:8080/api/v1';
-const directMode = apiConfig.env() === 'direct';
+const directMode = true; // Always use direct mode
 
 // Enum for error categories
 export enum ErrorCategory {

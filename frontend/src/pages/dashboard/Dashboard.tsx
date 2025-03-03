@@ -9,7 +9,8 @@ import {
   updatePortfolio, 
   deletePortfolio, 
   publishPortfolio,
-  Portfolio
+  Portfolio as BasePortfolio,
+  PortfolioType
 } from '../../store/slices/pageSlice';
 import {
   Container,
@@ -43,6 +44,7 @@ import {
   InputLabel,
   Select,
   Alert,
+  CardMedia,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -73,13 +75,22 @@ import './Dashboard.css';
 import { SocialLinks } from '../../types';
 import ApiService from '../../services/api';
 
-const SIDEBAR_WIDTH = 280;
+const SIDEBAR_WIDTH = 320;
+
+// Extend the Portfolio interface to include projectMeta
+interface Portfolio extends BasePortfolio {
+  projectMeta?: {
+    profession?: string;
+    hasImage?: boolean;
+  };
+}
 
 interface ProfileData {
   name?: string;
   profession?: string;
   bio?: string;
   socialLinks?: SocialLinks;
+  avatarPreview?: string;
 }
 
 const Dashboard: React.FC = () => {
@@ -93,8 +104,11 @@ const Dashboard: React.FC = () => {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [newPageType, setNewPageType] = useState<'about' | 'cv' | 'portfolio'>('about');
   const [newPageTitle, setNewPageTitle] = useState('');
+  const [newPageDescription, setNewPageDescription] = useState('');
+  const [selectedProfession, setSelectedProfession] = useState<string | null>(null);
+  const [projectImage, setProjectImage] = useState<File | null>(null);
+  const [projectImagePreview, setProjectImagePreview] = useState<string | null>(null);
 
   // Menu states
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -103,6 +117,7 @@ const Dashboard: React.FC = () => {
   // Profile states
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
+  const [isEditingSocialLinks, setIsEditingSocialLinks] = useState(false);
   const [profileData, setProfileData] = useState<ProfileData>({
     name: user?.name || '',
     profession: user?.profession || '',
@@ -115,6 +130,20 @@ const Dashboard: React.FC = () => {
       dribbble: user?.socialLinks?.dribbble || '',
     },
   });
+
+  // Profession options
+  const professionOptions = [
+    { value: 'webDevelopment', label: 'Web Development', icon: '🌐', description: 'Websites and web applications' },
+    { value: 'mobileDevelopment', label: 'Mobile Development', icon: '📱', description: 'iOS and Android applications' },
+    { value: 'uiuxDesign', label: 'UI/UX Design', icon: '🎨', description: 'User interfaces and experiences' },
+    { value: 'graphicDesign', label: 'Graphic Design', icon: '🖌️', description: 'Visual content and branding' },
+    { value: 'productDesign', label: 'Product Design', icon: '📐', description: 'Physical and digital products' },
+    { value: 'photography', label: 'Photography', icon: '📷', description: 'Professional photography work' },
+    { value: 'videoProduction', label: 'Video Production', icon: '🎬', description: 'Videos and motion graphics' },
+    { value: 'writing', label: 'Writing', icon: '✍️', description: 'Articles, blogs and content' },
+    { value: 'marketing', label: 'Marketing', icon: '📊', description: 'Digital marketing campaigns' },
+    { value: 'other', label: 'Other', icon: '🔍', description: 'Custom project type' }
+  ];
 
   // Fetch portfolios on component mount
   useEffect(() => {
@@ -145,13 +174,8 @@ const Dashboard: React.FC = () => {
   }, [isAuthenticated, navigate]);
 
   const handleCreateNew = async () => {
-    if (newPageType === 'portfolio') {
       // Show the create dialog for portfolios
       setIsCreateDialogOpen(true);
-    } else {
-      // Direct to the editor for other page types
-      navigate('/editor', { state: { pageType: newPageType } });
-    }
   };
 
   const handleViewPortfolio = (portfolio: Portfolio) => {
@@ -164,137 +188,83 @@ const Dashboard: React.FC = () => {
     setMenuAnchorEl(null);
   };
 
-  const getPortfolioTemplate = (type: string): { description: string, sections: any[] } => {
-    switch(type) {
-      case 'about':
-        return {
-          description: 'My personal page showcasing my background, skills, and interests',
-          sections: [
-            {
-              title: 'About Me',
-              type: 'text',
-              content: 'This is your about me page. Here you can share your background, interests, and story with visitors.',
-              order: 0
-            },
-            {
-              title: 'My Skills',
-              type: 'list',
-              content: 'Web Development\nUI/UX Design\nProject Management',
-              order: 1
-            },
-            {
-              title: 'Experience',
-              type: 'timeline',
-              content: 'Share your professional journey and achievements here.',
-              order: 2
-            }
-          ]
-        };
-      case 'cv':
-        return {
-          description: 'My professional resume showcasing my skills and experience',
-          sections: [
-            {
-              title: 'Professional Summary',
-              type: 'text',
-              content: 'A brief overview of your professional background and key qualifications.',
-              order: 0
-            },
-            {
-              title: 'Work Experience',
-              type: 'timeline',
-              content: 'List your work experience with company names, dates, and key responsibilities.',
-              order: 1
-            },
-            {
-              title: 'Education',
-              type: 'timeline',
-              content: 'Share your educational background including degrees, institutions, and graduation dates.',
-              order: 2
-            },
-            {
-              title: 'Skills',
-              type: 'list',
-              content: 'Technical Skills\nSoft Skills\nCertifications',
-              order: 3
-            }
-          ]
-        };
-      case 'portfolio':
-        return {
-          description: 'My creative portfolio showcasing my projects and work',
-          sections: [
-            {
-              title: 'Portfolio Introduction',
-              type: 'text',
-              content: 'Welcome to my portfolio. Here you\'ll find a collection of my best work and projects.',
-              order: 0
-            },
-            {
-              title: 'Featured Projects',
-              type: 'gallery',
-              content: 'This section will display your featured projects with images and descriptions.',
-              order: 1
-            }
-          ]
-        };
-      default:
-        return {
-          description: `A new ${type} page`,
-          sections: []
-        };
-    }
-  };
-
-  const handleCreatePortfolio = async () => {
+  const handleCreateProject = async () => {
     if (!newPageTitle) {
-      showError('Portfolio name is required');
+      showError('Project title is required');
+      return;
+    }
+
+    if (!selectedProfession) {
+      showError('Please select a project profession type');
       return;
     }
 
     try {
-      console.log('Creating new portfolio:', newPageTitle, 'type:', newPageType);
+      console.log('Creating new project:', newPageTitle, 'type:', selectedProfession);
       
-      // Get template data based on portfolio type
-      const template = getPortfolioTemplate(newPageType);
-      
-      // Prepare portfolio data with supported fields
+      // Prepare project data with supported fields
       const portfolioData = {
         title: newPageTitle,
-        description: template.description,
-        type: newPageType,
-        // Add theme and layout for better connection between components
+        description: newPageDescription,
+        type: 'portfolio' as PortfolioType, // Use portfolio type since we're creating a project
         theme: 'modern',
-        layout: 'standard'
+        layout: 'standard',
+        projectMeta: { // Store project specific data in metadata
+          profession: selectedProfession,
+          hasImage: !!projectImage
+        }
       };
       
       const result = await dispatch(createPortfolio(portfolioData)).unwrap();
       
       if (result) {
-        showSuccess(`${newPageType.charAt(0).toUpperCase() + newPageType.slice(1)} page created successfully`);
+        // If we have an image, upload it
+        if (projectImage && result.id) {
+          // Upload the image using the ApiService
+          try {
+            const uploadResponse = await ApiService.uploadProjectImage(result.id, projectImage);
+            if (uploadResponse.error) {
+              console.error('Failed to upload project image:', uploadResponse.error);
+              showError(`Project created but image upload failed: ${uploadResponse.error}`);
+            } else {
+              console.log('Project image uploaded successfully');
+            }
+          } catch (imageError) {
+            console.error('Error uploading project image:', imageError);
+            showError('Project created but image upload failed');
+          }
+        }
+      
+        showSuccess('Project created successfully');
         setIsCreateDialogOpen(false);
         setNewPageTitle('');
+        setNewPageDescription('');
+        setSelectedProfession(null);
+        setProjectImage(null);
+        setProjectImagePreview(null);
         
         // Force refresh portfolios list
         dispatch(fetchPortfolios());
         
-        // Redirect to editor for the newly created portfolio
+        // Redirect to editor for the newly created project
         setTimeout(() => {
           navigate(`/editor/${result.id}`);
         }, 500);
       }
     } catch (error) {
-      console.error('Failed to create portfolio:', error);
-      showError(error instanceof Error ? error.message : 'Failed to create portfolio');
+      console.error('Failed to create project:', error);
+      showError(error instanceof Error ? error.message : 'Failed to create project');
     }
   };
 
   const handleDeletePortfolio = async (portfolioId: string) => {
     try {
       await dispatch(deletePortfolio(portfolioId)).unwrap();
-      setMenuAnchorEl(null);
       showSuccess('Portfolio deleted successfully');
+      // Force refresh portfolios list
+      dispatch(fetchPortfolios());
     } catch (error) {
+      console.error('Failed to delete portfolio:', error);
       showError(error instanceof Error ? error.message : 'Failed to delete portfolio');
     }
   };
@@ -302,9 +272,11 @@ const Dashboard: React.FC = () => {
   const handlePublishPortfolio = async (portfolioId: string) => {
     try {
       await dispatch(publishPortfolio(portfolioId)).unwrap();
-      setMenuAnchorEl(null);
       showSuccess('Portfolio published successfully');
+      // Force refresh portfolios list
+      dispatch(fetchPortfolios());
     } catch (error) {
+      console.error('Failed to publish portfolio:', error);
       showError(error instanceof Error ? error.message : 'Failed to publish portfolio');
     }
   };
@@ -348,29 +320,26 @@ const Dashboard: React.FC = () => {
       
       if (profileData.socialLinks) {
         Object.entries(profileData.socialLinks).forEach(([key, value]) => {
-          if (value && value.trim()) {
-            cleanedSocialLinks[key] = value.trim();
-          }
+          // Include all keys, even if empty, to allow clearing links
+          cleanedSocialLinks[key] = value ? value.trim() : '';
         });
       }
       
-      // Use the direct API service method instead of updateProfile
+      console.log('Sending social links update:', cleanedSocialLinks);
+      
+      // Use the direct API service method
       const response = await ApiService.updateSocialLinks(cleanedSocialLinks);
       
       if (response.error) {
         throw new Error(response.error);
       }
       
-      // Refresh user data from updated localStorage
-      refreshUserData();
-      
-      // Force UI update with the latest data
-      setTimeout(() => {
-        forceRefreshUI();
-      }, 100);
-      
+      // Refresh user data and update UI
+      await refreshUserData();
+      setIsEditingSocialLinks(false);
       showSuccess('Social links updated successfully');
     } catch (error) {
+      console.error('Error updating social links:', error);
       showError(error instanceof Error ? error.message : 'Failed to update social links');
     }
   };
@@ -396,6 +365,7 @@ const Dashboard: React.FC = () => {
 
   // Direct handler for social link inputs
   const handleSocialInputChange = (platform: keyof SocialLinks) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log(`Updating ${platform} to ${e.target.value}`);
     setProfileData(prev => ({
       ...prev,
       socialLinks: {
@@ -403,6 +373,10 @@ const Dashboard: React.FC = () => {
         [platform]: e.target.value,
       },
     }));
+  };
+
+  const toggleSocialLinksEditing = () => {
+    setIsEditingSocialLinks(!isEditingSocialLinks);
   };
 
   // Updated useEffect for debugging and additional logging
@@ -503,11 +477,63 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleProjectImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      const file = e.target.files[0];
+      console.log("Uploading project image:", file.name);
+      setProjectImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProjectImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Avatar upload improvement
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      const file = e.target.files[0];
+      console.log("Uploading avatar file:", file.name);
+      
+      // Create a preview before upload
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // Create a temporary preview before server confirms
+        const previewUrl = reader.result as string;
+        // Update local UI immediately with preview
+        setProfileData(prev => ({
+          ...prev,
+          avatarPreview: previewUrl
+        }));
+      };
+      reader.readAsDataURL(file);
+      
+      // Upload to server - fix the endpoint path based on backend configuration
+      ApiService.uploadAvatar(file)
+        .then(response => {
+          if (response.error) {
+            console.error("❌ Failed to upload avatar:", response.error);
+            throw new Error(response.error);
+          }
+          if (response.data) {
+            console.log("✅ Avatar uploaded successfully:", response.data);
+            dispatch(updateUser(response.data as User));
+            showSuccess('Avatar uploaded successfully');
+          }
+        })
+        .catch(error => {
+          console.error("❌ Failed to upload avatar:", error);
+          showError(error instanceof Error ? error.message : 'Failed to upload avatar');
+        });
+    }
+  };
+
   return (
     <Box sx={{ 
       width: '100vw',
       minHeight: '100vh',
-      backgroundColor: 'background.default',
+      backgroundColor: '#f8f9fa',
       position: 'fixed',
       top: 0,
       left: 0,
@@ -523,14 +549,14 @@ const Dashboard: React.FC = () => {
           width: SIDEBAR_WIDTH,
           height: '100vh',
           overflow: 'auto',
-          borderRight: 1,
-          borderColor: 'divider',
+          borderRight: '1px solid rgba(0, 0, 0, 0.08)',
           display: 'flex',
           flexDirection: 'column',
+          bgcolor: '#ffffff',
         }}
       >
         {/* Profile Section */}
-        <Box sx={{ p: 3, textAlign: 'center', position: 'relative' }}>
+        <Box sx={{ p: 4, textAlign: 'center', position: 'relative', borderBottom: '1px solid rgba(0, 0, 0, 0.08)', mb: 2 }}>
           <IconButton
             size="small"
             onClick={forceRefreshUI}
@@ -539,58 +565,46 @@ const Dashboard: React.FC = () => {
           >
             <RefreshIcon fontSize="small" />
           </IconButton>
-          <Box sx={{ position: 'relative', display: 'inline-block', mb: 2 }}>
+          <Box sx={{ position: 'relative', display: 'inline-block', mb: 3 }}>
             <input
               type="file"
               accept="image/*"
               style={{ display: 'none' }}
               id="avatar-upload"
-              onChange={(e) => {
-                if (e.target.files?.length) {
-                  const file = e.target.files[0];
-                  ApiService.uploadAvatar(file)
-                    .then(response => {
-                      if (response.error) throw new Error(response.error);
-                      if (response.data) {
-                        dispatch(updateUser(response.data as User));
-                        showSuccess('Avatar uploaded successfully');
-                      }
-                    })
-                    .catch(error => {
-                      showError(error instanceof Error ? error.message : 'Failed to upload avatar');
-                    });
-                }
-              }}
+              onChange={handleAvatarUpload}
             />
             <label htmlFor="avatar-upload">
               <Avatar
-                src={user?.avatar}
+                src={profileData.avatarPreview || user?.avatar}
                 alt={user?.name}
                 sx={{
-                  width: 120,
-                  height: 120,
+                  width: 140,
+                  height: 140,
                   mb: 2,
                   mx: 'auto',
                   cursor: 'pointer',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                  border: '4px solid white',
                   '&:hover': {
-                    opacity: 0.8,
-                  },
+                    opacity: 0.9,
+                  }
                 }}
               />
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: 8,
+                  right: 8,
+                  bgcolor: 'white',
+                  borderRadius: '50%',
+                  p: 0.5,
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+                  cursor: 'pointer',
+                }}
+              >
+                <EditIcon fontSize="small" color="primary" />
+              </Box>
             </label>
-            <IconButton
-              size="small"
-              sx={{
-                position: 'absolute',
-                bottom: 0,
-                right: 0,
-                backgroundColor: 'background.paper',
-                '&:hover': { backgroundColor: 'background.paper' },
-              }}
-              onClick={() => setIsEditing(true)}
-            >
-              <EditIcon />
-            </IconButton>
           </Box>
           {isEditing ? (
             <Box sx={{ mb: 2 }}>
@@ -600,530 +614,1051 @@ const Dashboard: React.FC = () => {
                 name="name"
                 value={profileData.name}
                 onChange={handleInputChange}
-                sx={{ mb: 2 }}
+                margin="normal"
+                variant="outlined"
+                size="small"
+                sx={{ mb: 1 }}
               />
               <TextField
                 fullWidth
-                label="Professional Title"
+                label="Profession"
                 name="profession"
                 value={profileData.profession}
                 onChange={handleInputChange}
-                sx={{ mb: 2 }}
+                margin="normal"
+                variant="outlined"
+                size="small"
+                sx={{ mb: 1 }}
               />
-              <TextField
-                fullWidth
-                label="Bio"
-                name="bio"
-                multiline
-                rows={4}
-                value={profileData.bio}
-                onChange={handleInputChange}
-                sx={{ mb: 2 }}
-              />
-              <Button
-                variant="contained"
-                onClick={handleProfileUpdate}
-                sx={{ mr: 1 }}
-              >
-                Save
-              </Button>
-              <Button
-                onClick={() => setIsEditing(false)}
-              >
-                Cancel
-              </Button>
+              <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleProfileUpdate}
+                  sx={{ flex: 1, borderRadius: '8px' }}
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setIsEditing(false)}
+                  sx={{ flex: 1, borderRadius: '8px' }}
+                >
+                  Cancel
+                </Button>
+              </Box>
             </Box>
           ) : (
-            <>
-              <Typography variant="h6" gutterBottom data-profile-name>
+            <Box>
+              <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
                 {user?.name}
               </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom data-profile-profession>
-                {user?.profession || 'Professional Title'}
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                {user?.profession || 'Add your profession'}
               </Typography>
-            </>
+              <Button 
+                variant="outlined" 
+                startIcon={<EditIcon />} 
+                onClick={() => setIsEditing(true)}
+                size="small"
+                sx={{ 
+                  borderRadius: '20px',
+                  textTransform: 'none',
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: 'rgba(103, 58, 183, 0.08)',
+                  }
+                }}
+              >
+                Edit Profile
+              </Button>
+            </Box>
           )}
         </Box>
 
-        <Divider />
-
-        {/* Pages Management */}
-        <Box sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="subtitle2">
-              Your Pages
+        {/* Bio Section */}
+        <Box sx={{ px: 3, mb: 3 }}>
+          <Box sx={{ 
+            p: 3, 
+            bgcolor: '#ffffff', 
+            borderRadius: 2, 
+            boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+            position: 'relative' 
+          }}>
+            <Typography variant="h6" fontWeight="600" sx={{ mb: 2 }}>
+              Bio
             </Typography>
-            <Button 
-              size="small" 
-              variant="contained" 
-              startIcon={<AddIcon />}
-              onClick={() => setIsCreateDialogOpen(true)}
-            >
-              Create New
-            </Button>
+            {isEditingBio ? (
+              <Box>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  placeholder="Write something about yourself..."
+                  value={profileData.bio}
+                  onChange={handleBioChange}
+                  sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleBioSave}
+                    size="small"
+                    sx={{ borderRadius: '8px' }}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setIsEditingBio(false)}
+                    size="small"
+                    sx={{ borderRadius: '8px' }}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <Box 
+                onClick={handleBioClick} 
+                sx={{ 
+                  borderRadius: 1,
+                  p: 2, 
+                  cursor: 'pointer',
+                  minHeight: '100px',
+                  position: 'relative',
+                  bgcolor: 'rgba(0,0,0,0.02)',
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  '&:hover': {
+                    bgcolor: 'rgba(0,0,0,0.04)',
+                    '& .edit-icon': {
+                      opacity: 1,
+                    }
+                  }
+                }}
+              >
+                <Typography variant="body2" color={profileData.bio ? 'text.primary' : 'text.secondary'}>
+                  {profileData.bio || 'Click to add a bio...'}
+                </Typography>
+                <EditIcon 
+                  className="edit-icon" 
+                  sx={{ 
+                    position: 'absolute', 
+                    bottom: 8, 
+                    right: 8, 
+                    fontSize: '1rem',
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                    color: 'text.secondary'
+                  }} 
+                />
+              </Box>
+            )}
           </Box>
+        </Box>
 
-          {/* Display fixed page types with their statuses */}
-          <List sx={{ width: '100%' }}>
-            {/* About Me Page */}
-            <ListItem
-              secondaryAction={
-                <IconButton 
-                  edge="end" 
-                  onClick={() => navigate('/editor', { state: { pageType: 'about' } })}
-                  title="Edit About Me Page"
+        {/* Social Links */}
+        <Box sx={{ px: 3, mb: 3 }}>
+          <Box sx={{ p: 3, bgcolor: '#ffffff', borderRadius: 2, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" fontWeight="600">
+                Social Links
+              </Typography>
+              {isEditingSocialLinks ? (
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    size="small"
+                    onClick={handleSocialLinksUpdate}
+                    variant="contained"
+                    color="primary"
+                    sx={{ fontWeight: 'bold', borderRadius: '8px' }}
+                    startIcon={<SaveIcon />}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={toggleSocialLinksEditing}
+                    variant="outlined"
+                    color="secondary"
+                    sx={{ borderRadius: '8px' }}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              ) : (
+                <Button
+                  size="small"
+                  onClick={toggleSocialLinksEditing}
+                  variant="outlined"
+                  color="primary"
+                  sx={{ borderRadius: '8px' }}
+                  startIcon={<EditIcon />}
                 >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              }
+                  Edit Links
+                </Button>
+              )}
+            </Box>
+            
+            {isEditingSocialLinks ? (
+              <Stack spacing={2}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="LinkedIn"
+                  placeholder="https://linkedin.com/in/username"
+                  value={profileData.socialLinks?.linkedin || ''}
+                  onChange={handleSocialInputChange('linkedin')}
+                  InputProps={{
+                    startAdornment: <LinkedInIcon sx={{ mr: 1, color: '#0077B5' }} />,
+                  }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                    }
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="GitHub"
+                  placeholder="https://github.com/username"
+                  value={profileData.socialLinks?.github || ''}
+                  onChange={handleSocialInputChange('github')}
+                  InputProps={{
+                    startAdornment: <GitHubIcon sx={{ mr: 1, color: '#171515' }} />,
+                  }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                    }
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Twitter"
+                  placeholder="https://twitter.com/username"
+                  value={profileData.socialLinks?.twitter || ''}
+                  onChange={handleSocialInputChange('twitter')}
+                  InputProps={{
+                    startAdornment: <TwitterIcon sx={{ mr: 1, color: '#1DA1F2' }} />,
+                  }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                    }
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Dribbble"
+                  placeholder="https://dribbble.com/username"
+                  value={profileData.socialLinks?.dribbble || ''}
+                  onChange={handleSocialInputChange('dribbble')}
+                  InputProps={{
+                    startAdornment: <InstagramIcon sx={{ mr: 1, color: '#EA4C89' }} />,
+                  }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                    }
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Behance"
+                  placeholder="https://behance.net/username"
+                  value={profileData.socialLinks?.behance || ''}
+                  onChange={handleSocialInputChange('behance')}
+                  InputProps={{
+                    startAdornment: <WebsiteIcon sx={{ mr: 1, color: '#1769FF' }} />,
+                  }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                    }
+                  }}
+                />
+              </Stack>
+            ) : (
+              <Stack spacing={1}>
+                {profileData.socialLinks?.linkedin ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+                    <LinkedInIcon sx={{ mr: 2, color: '#0077B5' }} />
+                    <Typography variant="body2" component="a" href={profileData.socialLinks.linkedin} target="_blank" sx={{ textDecoration: 'none', color: 'text.primary', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {profileData.socialLinks.linkedin}
+                    </Typography>
+                  </Box>
+                ) : null}
+                
+                {profileData.socialLinks?.github ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+                    <GitHubIcon sx={{ mr: 2, color: '#171515' }} />
+                    <Typography variant="body2" component="a" href={profileData.socialLinks.github} target="_blank" sx={{ textDecoration: 'none', color: 'text.primary', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {profileData.socialLinks.github}
+                    </Typography>
+                  </Box>
+                ) : null}
+                
+                {profileData.socialLinks?.twitter ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+                    <TwitterIcon sx={{ mr: 2, color: '#1DA1F2' }} />
+                    <Typography variant="body2" component="a" href={profileData.socialLinks.twitter} target="_blank" sx={{ textDecoration: 'none', color: 'text.primary', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {profileData.socialLinks.twitter}
+                    </Typography>
+                  </Box>
+                ) : null}
+                
+                {profileData.socialLinks?.dribbble ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+                    <InstagramIcon sx={{ mr: 2, color: '#EA4C89' }} />
+                    <Typography variant="body2" component="a" href={profileData.socialLinks.dribbble} target="_blank" sx={{ textDecoration: 'none', color: 'text.primary', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {profileData.socialLinks.dribbble}
+                    </Typography>
+                  </Box>
+                ) : null}
+                
+                {profileData.socialLinks?.behance ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+                    <WebsiteIcon sx={{ mr: 2, color: '#1769FF' }} />
+                    <Typography variant="body2" component="a" href={profileData.socialLinks.behance} target="_blank" sx={{ textDecoration: 'none', color: 'text.primary', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {profileData.socialLinks.behance}
+                    </Typography>
+                  </Box>
+                ) : null}
+                
+                {!profileData.socialLinks?.linkedin && 
+                 !profileData.socialLinks?.github && 
+                 !profileData.socialLinks?.twitter && 
+                 !profileData.socialLinks?.dribbble && 
+                 !profileData.socialLinks?.behance && (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                    No social links added yet. Click "Edit Links" to add your profiles.
+                  </Typography>
+                )}
+              </Stack>
+            )}
+          </Box>
+        </Box>
+
+        {/* Navigation Links */}
+        <Box sx={{ px: 3, flexGrow: 1 }}>
+          <List component="nav" sx={{ '& .MuiListItemButton-root': { borderRadius: '8px', mb: 1 } }}>
+            <ListItemButton
+              selected={true}
+              onClick={() => navigate('/dashboard')}
+              sx={{
+                bgcolor: theme => theme.palette.primary.main,
+                color: 'white',
+                '&.Mui-selected': {
+                  bgcolor: theme => theme.palette.primary.main,
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: theme => theme.palette.primary.dark,
+                  }
+                }
+              }}
             >
-              <ListItemIcon>
-                <PersonIcon />
+              <ListItemIcon sx={{ color: 'inherit' }}>
+                <DashboardIcon />
               </ListItemIcon>
-              <ListItemText 
-                primary="About Me" 
-                secondary={
-                  hasPortfolioOfType('about')
-                    ? "Published" 
-                    : "Not created yet"
-                } 
-              />
-            </ListItem>
-
-            {/* CV/Resume Page */}
-            <ListItem
-              secondaryAction={
-                <IconButton 
-                  edge="end" 
-                  onClick={() => navigate('/editor', { state: { pageType: 'cv' } })}
-                  title="Edit CV/Resume Page"
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              }
+              <ListItemText primary="Portfolio / Works" />
+            </ListItemButton>
+            
+            <ListItemButton
+              onClick={() => navigate('/cv')}
             >
               <ListItemIcon>
                 <DescriptionIcon />
               </ListItemIcon>
-              <ListItemText 
-                primary="CV/Resume" 
-                secondary={
-                  hasPortfolioOfType('cv')
-                    ? "Published" 
-                    : "Not created yet"
-                } 
-              />
-            </ListItem>
-
-            {/* Portfolio Page */}
-            <ListItem
-              secondaryAction={
-                <IconButton 
-                  edge="end" 
-                  onClick={() => navigate('/editor', { state: { pageType: 'portfolio' } })}
-                  title="Edit Portfolio Page"
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              }
-            >
-              <ListItemIcon>
-                <CollectionsIcon />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Portfolio Gallery" 
-                secondary={
-                  hasPortfolioOfType('portfolio')
-                    ? "Published" 
-                    : "Not created yet"
-                } 
-              />
-            </ListItem>
-          </List>
-
-          {/* Loading Indicator */}
-          {loading && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <CircularProgress size={24} />
-            </Box>
-          )}
-          
-          {/* Error Message */}
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {error}
-            </Alert>
-          )}
-        </Box>
-
-        <Divider />
-
-        {/* Bio Section */}
-        <Box sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Bio
-            </Typography>
-            {isEditingBio ? (
-              <Button 
-                size="small" 
-                variant="contained" 
-                onClick={handleBioSave}
-                startIcon={<SaveIcon />}
-              >
-                Save Bio
-              </Button>
-            ) : (
-              <IconButton 
-                size="small" 
-                onClick={() => setIsEditingBio(true)}
-                title="Edit Bio"
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Box>
-          
-          {isEditingBio ? (
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              name="bio"
-              value={profileData.bio || ''}
-              onChange={handleBioChange}
-              placeholder="Add a short bio to tell your story..."
-              variant="outlined"
-              autoFocus
-            />
-          ) : (
-            <Typography 
-              variant="body2" 
-              color="text.secondary" 
-              paragraph 
-              data-profile-bio
-              onClick={handleBioClick}
-              sx={{ 
-                cursor: 'pointer', 
-                '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-                p: 1,
-                borderRadius: 1,
-                minHeight: '80px'
-              }}
-            >
-              {user?.bio || 'Add a short bio to tell your story... (click to edit)'}
-            </Typography>
-          )}
-        </Box>
-
-        <Divider />
-
-        {/* Social Links */}
-        <Box sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="subtitle2">
-              Social Links
-            </Typography>
-            <Button
-              size="small"
-              onClick={handleSocialLinksUpdate}
-              variant="outlined"
-              startIcon={<SaveIcon />}
-            >
-              Save Links
-            </Button>
-          </Box>
-          <Stack spacing={2}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="LinkedIn URL"
-              value={profileData.socialLinks?.linkedin || ''}
-              onChange={handleSocialInputChange('linkedin')}
-              name="social-linkedin"
-              InputProps={{
-                startAdornment: <LinkedInIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="GitHub URL"
-              value={profileData.socialLinks?.github || ''}
-              onChange={handleSocialInputChange('github')}
-              name="social-github"
-              InputProps={{
-                startAdornment: <GitHubIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Twitter URL"
-              value={profileData.socialLinks?.twitter || ''}
-              onChange={handleSocialInputChange('twitter')}
-              name="social-twitter"
-              InputProps={{
-                startAdornment: <TwitterIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Dribbble URL"
-              value={profileData.socialLinks?.dribbble || ''}
-              onChange={handleSocialInputChange('dribbble')}
-              InputProps={{
-                startAdornment: <InstagramIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Behance URL"
-              value={profileData.socialLinks?.behance || ''}
-              onChange={handleSocialInputChange('behance')}
-              InputProps={{
-                startAdornment: <WebsiteIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-            />
-          </Stack>
-        </Box>
-
-        {/* Navigation Section */}
-        <List sx={{ flexGrow: 1 }}>
-          <ListItemButton selected>
-            <ListItemIcon>
-              <DashboardIcon />
-            </ListItemIcon>
-            <ListItemText primary="Dashboard" />
-          </ListItemButton>
-          
-          {/* Logout at bottom */}
-          <Box sx={{ mt: 'auto' }}>
-            <Divider />
-            <ListItemButton onClick={handleLogout}>
-              <ListItemIcon>
-                <LogoutIcon />
-              </ListItemIcon>
-              <ListItemText primary="Logout" />
+              <ListItemText primary="CV / Resume" />
             </ListItemButton>
-          </Box>
-        </List>
+            
+            <ListItemButton
+              onClick={() => navigate('/about')}
+            >
+              <ListItemIcon>
+                <PersonIcon />
+              </ListItemIcon>
+              <ListItemText primary="About Me" />
+            </ListItemButton>
+          </List>
+        </Box>
+
+        {/* Social Media Icons */}
+        <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
+          {profileData.socialLinks?.linkedin && (
+            <IconButton 
+              component="a" 
+              href={profileData.socialLinks.linkedin} 
+              target="_blank"
+              sx={{ color: '#0077B5' }}
+            >
+              <LinkedInIcon />
+            </IconButton>
+          )}
+          {profileData.socialLinks?.github && (
+            <IconButton 
+              component="a" 
+              href={profileData.socialLinks.github} 
+              target="_blank"
+              sx={{ color: '#171515' }}
+            >
+              <GitHubIcon />
+            </IconButton>
+          )}
+          {profileData.socialLinks?.twitter && (
+            <IconButton 
+              component="a" 
+              href={profileData.socialLinks.twitter} 
+              target="_blank"
+              sx={{ color: '#1DA1F2' }}
+            >
+              <TwitterIcon />
+            </IconButton>
+          )}
+          {profileData.socialLinks?.behance && (
+            <IconButton 
+              component="a" 
+              href={profileData.socialLinks.behance} 
+              target="_blank"
+              sx={{ color: '#1769FF' }}
+            >
+              <WebsiteIcon />
+            </IconButton>
+          )}
+        </Box>
       </Paper>
 
       {/* Main Content */}
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
-        <Container maxWidth={false} sx={{ py: 4 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
+      <Box sx={{ 
+        flexGrow: 1, 
+        p: 4, 
+        overflow: 'auto', 
+        height: '100vh',
+        bgcolor: '#f8f9fa'
+      }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            mb: 3,
+            borderRadius: 2,
+            display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            mb: 4,
-            px: 2,
-          }}>
-            <Typography variant="h4" component="h1">
-              My Portfolios
-            </Typography>
+            bgcolor: '#ffffff',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+          }}
+        >
+          <Typography variant="h5" fontWeight="bold">
+            My Portfolio / Works
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={() => setIsCreateDialogOpen(true)}
+            sx={{ 
+              borderRadius: '8px', 
+              fontWeight: 'bold',
+              bgcolor: 'rgba(103, 58, 183, 0.9)',
+              '&:hover': {
+                bgcolor: 'rgba(103, 58, 183, 1)',
+              }
+            }}
+          >
+            Add Project
+          </Button>
+        </Paper>
+
+        {/* Portfolio Grid */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+            <CircularProgress />
+          </Box>
+        ) : error ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Alert severity="error">{error}</Alert>
             <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleCreateNew}
-              size="large"
+              variant="outlined"
+              color="primary"
+              onClick={() => dispatch(fetchPortfolios())}
+              sx={{ mt: 2, borderRadius: '8px' }}
             >
-              Create New Portfolio
+              Try Again
             </Button>
           </Box>
-
-          <Grid container spacing={3} sx={{ px: 2 }}>
-            {loading ? (
-              <Box sx={{ textAlign: 'center', py: 2 }}>
-                <CircularProgress size={24} />
-              </Box>
-            ) : error ? (
-              <Box sx={{ textAlign: 'center', py: 2 }}>
-                <Typography color="error" variant="body2" gutterBottom>
-                  {error}
-                </Typography>
-                <Button
-                  size="small"
-                  onClick={() => dispatch(fetchPortfolios())}
-                  startIcon={<RefreshIcon />}
-                >
-                  Retry
-                </Button>
-              </Box>
-            ) : (
-              portfolios?.map((portfolio) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={portfolio.id}>
-                  <Card sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: (theme) => theme.shadows[8],
-                    },
-                  }}>
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" component="h2" gutterBottom>
-                        {portfolio.title}
-                      </Typography>
-                      <Typography color="text.secondary" sx={{ mb: 2 }}>
-                        {portfolio.description}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                        <Paper sx={{ px: 1, py: 0.5, bgcolor: 'primary.light' }}>
-                          <Typography variant="caption" color="primary.contrastText">
-                            {portfolio.theme}
-                          </Typography>
-                        </Paper>
-                        <Paper sx={{ px: 1, py: 0.5, bgcolor: 'secondary.light' }}>
-                          <Typography variant="caption" color="secondary.contrastText">
-                            {portfolio.layout}
-                          </Typography>
-                        </Paper>
-                      </Box>
-                      {portfolio.customDomain && (
-                        <Typography variant="body2" sx={{ mb: 1 }}>
-                          Domain: {portfolio.customDomain}
-                        </Typography>
+        ) : (
+          <Grid container spacing={3}>
+            {portfolios && portfolios.length > 0 ? (
+              portfolios.map((portfolio) => (
+                <Grid item xs={12} sm={6} md={4} key={portfolio.id}>
+                  <Card 
+                    elevation={0} 
+                    sx={{ 
+                      borderRadius: 2, 
+                      overflow: 'hidden',
+                      transition: 'transform 0.3s, box-shadow 0.3s',
+                      boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
+                      '&:hover': {
+                        transform: 'translateY(-5px)',
+                        boxShadow: '0 15px 30px rgba(0,0,0,0.12)',
+                      }
+                    }}
+                  >
+                    <CardMedia
+                      component="div"
+                      sx={{ 
+                        height: 200,
+                        position: 'relative',
+                        overflow: 'hidden',
+                        bgcolor: 'rgba(0, 0, 0, 0.04)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {/* Use portfolio.coverImage or projectMeta to display image (if available) */}
+                      {portfolio.projectMeta?.hasImage ? (
+                        <img 
+                          src={`/api/projects/${portfolio.id}/image`}
+                          alt={portfolio.title} 
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            borderTopLeftRadius: '8px',
+                            borderTopRightRadius: '8px',
+                          }}
+                          onError={(e) => {
+                            // If image fails to load, show fallback icon
+                            e.currentTarget.style.display = 'none';
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                              const icon = document.createElement('div');
+                              icon.style.width = '100%';
+                              icon.style.height = '100%';
+                              icon.style.display = 'flex';
+                              icon.style.alignItems = 'center';
+                              icon.style.justifyContent = 'center';
+                              icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="rgba(0,0,0,0.2)"><path d="M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"></path></svg>';
+                              parent.appendChild(icon);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Box sx={{ 
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex', 
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: 'rgba(103, 58, 183, 0.05)'
+                        }}>
+                          <CollectionsIcon sx={{ fontSize: 60, color: 'rgba(103, 58, 183, 0.2)' }} />
+                        </Box>
                       )}
-                      <Typography variant="body2">
-                        Subdomain: {portfolio.subdomain}
+                      <IconButton
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          bgcolor: 'rgba(255,255,255,0.9)',
+                          '&:hover': { bgcolor: 'rgba(255,255,255,1)' }
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedPortfolio(portfolio);
+                          setMenuAnchorEl(e.currentTarget);
+                        }}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </CardMedia>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom fontWeight="bold">
+                        {portfolio.title || 'Project Title'}
                       </Typography>
-                    </CardContent>
-                    <CardActions sx={{ p: 2, pt: 0 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, height: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {portfolio.description || 'No description provided'}
+                      </Typography>
+                      <Stack direction="row" spacing={1} mb={2} flexWrap="wrap">
+                        <Chip 
+                          label={portfolio.type || 'Portfolio'} 
+                          size="small" 
+                          sx={{ 
+                            borderRadius: '8px', 
+                            bgcolor: 'rgba(103, 58, 183, 0.1)',
+                            color: 'rgba(103, 58, 183, 0.8)',
+                            fontWeight: 'bold',
+                            mb: 0.5
+                          }} 
+                        />
+                        <Chip 
+                          label={portfolio.theme || 'Modern'} 
+                          size="small" 
+                          sx={{ 
+                            borderRadius: '8px', 
+                            bgcolor: 'rgba(0,0,0,0.05)',
+                            mb: 0.5
+                          }} 
+                        />
+                      </Stack>
                       <Button
-                        size="small"
-                        onClick={() => handleViewPortfolio(portfolio)}
-                        sx={{ mr: 1 }}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        size="small"
                         variant="contained"
-                        onClick={() => handleEditPortfolio(portfolio)}
+                        fullWidth
+                        color="primary"
+                        onClick={() => {
+                          setSelectedPortfolio(portfolio);
+                          handleEditPortfolio(portfolio);
+                        }}
+                        sx={{ 
+                          borderRadius: '8px',
+                          bgcolor: 'rgba(103, 58, 183, 0.9)',
+                          '&:hover': {
+                            bgcolor: 'rgba(103, 58, 183, 1)',
+                          }
+                        }}
                       >
-                        Edit
+                        Edit Project
                       </Button>
-                    </CardActions>
+                    </CardContent>
                   </Card>
                 </Grid>
               ))
+            ) : (
+              <Grid item xs={12}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 4,
+                    textAlign: 'center',
+                    borderRadius: 2,
+                    borderStyle: 'dashed',
+                    borderWidth: 2,
+                    borderColor: 'rgba(0, 0, 0, 0.1)',
+                    bgcolor: 'transparent',
+                  }}
+                >
+                  <Box sx={{ 
+                    width: 100, 
+                    height: 100, 
+                    borderRadius: '50%', 
+                    bgcolor: 'rgba(103, 58, 183, 0.05)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    mx: 'auto',
+                    mb: 3
+                  }}>
+                    <AddIcon sx={{ fontSize: 48, color: 'rgba(103, 58, 183, 0.5)' }} />
+                  </Box>
+                  <Typography variant="h5" gutterBottom fontWeight="bold">
+                    No projects yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Create your first project to showcase your work.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<AddIcon />}
+                    onClick={() => setIsCreateDialogOpen(true)}
+                    sx={{ 
+                      borderRadius: '8px', 
+                      px: 3,
+                      py: 1,
+                      fontWeight: 'bold',
+                      bgcolor: 'rgba(103, 58, 183, 0.9)',
+                      '&:hover': {
+                        bgcolor: 'rgba(103, 58, 183, 1)',
+                      }
+                    }}
+                  >
+                    Add Project
+                  </Button>
+                </Paper>
+              </Grid>
             )}
-
-            {/* Show message when no portfolios */}
-            {(portfolios === null || portfolios.length === 0) && (
-              <Box sx={{ textAlign: 'center', py: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  No portfolios found. Create your first one!
+            
+            {/* Add Project Card */}
+            <Grid item xs={12} sm={6} md={4}>
+              <Card 
+                elevation={0} 
+                sx={{ 
+                  borderRadius: 2, 
+                  height: '100%',
+                  minHeight: 330,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: 'transparent',
+                  border: '2px dashed rgba(103, 58, 183, 0.2)',
+                  transition: 'all 0.3s',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    bgcolor: 'rgba(103, 58, 183, 0.03)',
+                    transform: 'translateY(-5px)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+                  }
+                }}
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                <Box sx={{ 
+                  width: 80, 
+                  height: 80, 
+                  borderRadius: '50%', 
+                  bgcolor: 'rgba(103, 58, 183, 0.05)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  mb: 3
+                }}>
+                  <AddIcon sx={{ fontSize: 40, color: 'rgba(103, 58, 183, 0.5)' }} />
+                </Box>
+                <Typography variant="h6" gutterBottom fontWeight="bold">
+                  Add New Project
                 </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Showcase your work by adding a new project to your portfolio.
+                </Typography>
+              </Card>
+            </Grid>
+          </Grid>
+        )}
+        
+        {/* Create Portfolio Dialog */}
+        <Dialog
+          open={isCreateDialogOpen}
+          onClose={() => setIsCreateDialogOpen(false)}
+          fullWidth
+          maxWidth="md"
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+            }
+          }}
+        >
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: { xs: 'column', md: 'row' },
+            height: { md: '600px' }
+          }}>
+            {/* Left side - Image preview */}
+            <Box sx={{ 
+              width: { xs: '100%', md: '45%' },
+              bgcolor: 'rgba(103, 58, 183, 0.03)',
+              p: 3,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              position: 'relative'
+            }}>
+              <Typography variant="h5" gutterBottom fontWeight="bold" sx={{ mb: 3, color: 'rgba(103, 58, 183, 0.9)' }}>
+                Project Cover
+              </Typography>
+              
+              {projectImagePreview ? (
+                <Box sx={{ position: 'relative', width: '100%', height: '100%', maxHeight: 400 }}>
+                  <img 
+                    src={projectImagePreview} 
+                    alt="Project preview" 
+                    style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      objectFit: 'cover', 
+                      borderRadius: 16,
+                      boxShadow: '0 8px 24px rgba(103, 58, 183, 0.15)'
+                    }} 
+                  />
+                  <IconButton
+                    sx={{
+                      position: 'absolute',
+                      top: 16,
+                      right: 16,
+                      bgcolor: 'rgba(255,255,255,0.9)',
+                      '&:hover': { bgcolor: 'rgba(255,255,255,1)' },
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                    }}
+                    onClick={() => {
+                      setProjectImage(null);
+                      setProjectImagePreview(null);
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              ) : (
+                <Box sx={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  maxHeight: 400,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  border: '2px dashed rgba(103, 58, 183, 0.2)',
+                  borderRadius: 4,
+                  p: 3
+                }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    fullWidth
+                    sx={{ 
+                      height: '100%',
+                      borderStyle: 'none',
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 2
+                    }}
+                  >
+                    <CollectionsIcon sx={{ fontSize: 60, color: 'rgba(103, 58, 183, 0.4)' }} />
+                    <Typography variant="body1" fontWeight="medium" color="rgba(103, 58, 183, 0.8)">
+                      Upload Cover Image
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" textAlign="center">
+                      Drag and drop or click to browse
+                    </Typography>
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={handleProjectImageChange}
+                    />
+                  </Button>
+                </Box>
+              )}
+            </Box>
+            
+            {/* Right side - Form fields */}
+            <Box sx={{ 
+              width: { xs: '100%', md: '55%' },
+              p: 4,
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <DialogTitle sx={{ p: 0, mb: 3 }}>
+                <Typography variant="h4" fontWeight="bold" sx={{ color: 'rgba(103, 58, 183, 0.9)' }}>
+                  Create New Project
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Enter basic information to create your project
+                </Typography>
+              </DialogTitle>
+              
+              <DialogContent sx={{ p: 0, overflow: 'auto', flex: 1 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <TextField
+              autoFocus
+              id="title"
+                    label="Project Title"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={newPageTitle}
+              onChange={(e) => setNewPageTitle(e.target.value)}
+                    InputProps={{
+                      sx: {
+                        borderRadius: 2,
+                        '& .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'rgba(103, 58, 183, 0.2)'
+                        },
+                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'rgba(103, 58, 183, 0.5)'
+                        },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'rgba(103, 58, 183, 0.8)'
+                        }
+                      }
+                    }}
+                    InputLabelProps={{
+                      sx: {
+                        color: 'rgba(103, 58, 183, 0.7)'
+                      }
+                    }}
+                  />
+                  <TextField
+                    id="description"
+                    label="Project Description"
+                    type="text"
+                    fullWidth
+                    variant="outlined"
+                    multiline
+                    rows={4}
+                    value={newPageDescription || ''}
+                    onChange={(e) => setNewPageDescription(e.target.value)}
+                    InputProps={{
+                      sx: {
+                        borderRadius: 2,
+                        '& .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'rgba(103, 58, 183, 0.2)'
+                        },
+                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'rgba(103, 58, 183, 0.5)'
+                        },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                          borderColor: 'rgba(103, 58, 183, 0.8)'
+                        }
+                      }
+                    }}
+                    InputLabelProps={{
+                      sx: {
+                        color: 'rgba(103, 58, 183, 0.7)'
+                      }
+                    }}
+                  />
+                  
+                  {/* Modern Profession Type Selector */}
+                  <Box>
+                    <Typography variant="subtitle1" gutterBottom sx={{ color: 'rgba(103, 58, 183, 0.7)', mb: 1 }}>
+                      Project Profession Type
+                    </Typography>
+                    <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+                      {professionOptions.map((option) => (
+                        <Grid item xs={6} sm={6} md={4} key={option.value}>
+                          <Card
+                            onClick={() => setSelectedProfession(option.value)}
+                            sx={{
+                              py: 1.5,
+                              px: 2,
+                              cursor: 'pointer',
+                              borderRadius: 2,
+                              border: selectedProfession === option.value 
+                                ? '2px solid rgba(103, 58, 183, 0.8)' 
+                                : '1px solid rgba(0, 0, 0, 0.08)',
+                              backgroundColor: selectedProfession === option.value 
+                                ? 'rgba(103, 58, 183, 0.05)' 
+                                : 'white',
+                              transition: 'all 0.2s ease',
+                              boxShadow: selectedProfession === option.value 
+                                ? '0 4px 12px rgba(103, 58, 183, 0.15)' 
+                                : 'none',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              height: '100%',
+                              minHeight: 80
+                            }}
+                          >
+                            <Typography variant="h6" sx={{ fontSize: '1.5rem', mb: 0 }}>
+                              {option.icon}
+                            </Typography>
+                            <Typography variant="body2" sx={{ 
+                              fontWeight: selectedProfession === option.value ? 'bold' : 'medium',
+                              color: selectedProfession === option.value ? 'rgba(103, 58, 183, 0.9)' : 'text.primary',
+                              textAlign: 'center'
+                            }}>
+                              {option.label}
+                            </Typography>
+                          </Card>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                </Box>
+          </DialogContent>
+              
+              <DialogActions sx={{ p: 0, mt: 4, justifyContent: 'space-between' }}>
+                <Button 
+                  onClick={() => setIsCreateDialogOpen(false)}
+                  sx={{ 
+                    borderRadius: 2,
+                    px: 3,
+                    py: 1,
+                    color: 'rgba(103, 58, 183, 0.8)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(103, 58, 183, 0.05)'
+                    }
+                  }}
+                >
+                  Cancel
+                </Button>
                 <Button 
                   variant="contained" 
-                  color="primary"
-                  startIcon={<AddIcon />}
-                  onClick={() => setIsCreateDialogOpen(true)}
-                  sx={{ mt: 2 }}
+                  onClick={handleCreateProject}
+                  disabled={loading || !newPageTitle || !selectedProfession}
+                  sx={{ 
+                    borderRadius: 2,
+                    px: 4,
+                    py: 1.5,
+                    fontWeight: 'bold',
+                    bgcolor: 'rgba(103, 58, 183, 0.9)',
+                    '&:hover': {
+                      bgcolor: 'rgba(103, 58, 183, 1)'
+                    },
+                    boxShadow: '0 4px 12px rgba(103, 58, 183, 0.2)'
+                  }}
                 >
-                  Create Portfolio
+                  {loading ? <CircularProgress size={24} /> : 'Create & Continue'}
                 </Button>
-              </Box>
-            )}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Create New Portfolio Dialog */}
-      <Dialog
-        open={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        fullWidth
-        maxWidth="xs"
-      >
-        <DialogTitle>Create New Portfolio</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            id="title"
-            label="Portfolio Name"
-            type="text"
-            fullWidth
-            variant="outlined"
-            value={newPageTitle}
-            onChange={(e) => setNewPageTitle(e.target.value)}
-            sx={{ mb: 2, mt: 1 }}
-          />
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="portfolio-type-label">Portfolio Type</InputLabel>
-            <Select
-              labelId="portfolio-type-label"
-              id="portfolio-type"
-              value={newPageType}
-              label="Portfolio Type"
-              onChange={(e) => setNewPageType(e.target.value as 'about' | 'cv' | 'portfolio')}
-            >
-              <MenuItem value="portfolio">Gallery Portfolio</MenuItem>
-              <MenuItem value="about">About Me</MenuItem>
-              <MenuItem value="cv">CV/Resume</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreatePortfolio}>Create</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Page Actions Menu */}
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={() => setMenuAnchorEl(null)}
-      >
-        <MenuItem 
-          onClick={() => selectedPortfolio && handleViewPortfolio(selectedPortfolio)}
+          </DialogActions>
+            </Box>
+          </Box>
+        </Dialog>
+        
+        {/* Portfolio Menu */}
+        <Menu
+          anchorEl={menuAnchorEl}
+          open={Boolean(menuAnchorEl)}
+          onClose={() => setMenuAnchorEl(null)}
         >
-          <ListItemIcon>
-            <VisibilityIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>View</ListItemText>
-        </MenuItem>
-        <MenuItem 
-          onClick={() => selectedPortfolio && handleEditPortfolio(selectedPortfolio)}
-        >
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Edit</ListItemText>
-        </MenuItem>
-        {selectedPortfolio?.isPublished === false && (
           <MenuItem 
-            onClick={() => selectedPortfolio && handlePublishPortfolio(selectedPortfolio.id)}
+            onClick={() => selectedPortfolio && handleViewPortfolio(selectedPortfolio)}
           >
             <ListItemIcon>
-              <WebsiteIcon fontSize="small" />
+              <VisibilityIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>View</ListItemText>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => selectedPortfolio && handleEditPortfolio(selectedPortfolio)}
+          >
+            <ListItemIcon>
+              <EditIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Edit</ListItemText>
+          </MenuItem>
+          {selectedPortfolio?.isPublished === false && (
+            <MenuItem 
+              onClick={() => selectedPortfolio && handlePublishPortfolio(selectedPortfolio.id)}
+            >
+              <ListItemIcon>
+                <WebsiteIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>
+                Publish
+              </ListItemText>
+            </MenuItem>
+          )}
+          <MenuItem 
+            onClick={() => selectedPortfolio && handleDeletePortfolio(selectedPortfolio.id)}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" color="error" />
             </ListItemIcon>
             <ListItemText>
-              Publish
+              Delete
             </ListItemText>
           </MenuItem>
-        )}
-        <MenuItem 
-          onClick={() => selectedPortfolio && handleDeletePortfolio(selectedPortfolio.id)}
-          sx={{ color: 'error.main' }}
-        >
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" color="error" />
-          </ListItemIcon>
-          <ListItemText>
-            Delete
-          </ListItemText>
-        </MenuItem>
-      </Menu>
+        </Menu>
+      </Box>
     </Box>
   );
 };

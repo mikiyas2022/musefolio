@@ -38,7 +38,7 @@ const environments: Record<string, ApiEnvironment> = {
   },
   // For local development with a non-proxy server
   direct: {
-    baseUrl: 'http://localhost:8080/api/v1',  // Add this if your backend runs on a different port
+    baseUrl: 'http://localhost:8080/api/v1',  // Changed back to 8080
     timeout: 10000,
     retryAttempts: 2,
     retryDelay: 1000,

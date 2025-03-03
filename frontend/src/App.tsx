@@ -259,16 +259,16 @@ function App() {
 
   return (
     <Router>
-      <ThemeProvider>
+    <ThemeProvider>
         <FeedbackProvider>
           <AuthProvider>
             <ToastContainer position="top-right" autoClose={5000} />
             <ErrorBoundary>
-              <AppRoutes />
+            <AppRoutes />
             </ErrorBoundary>
           </AuthProvider>
         </FeedbackProvider>
-      </ThemeProvider>
+    </ThemeProvider>
     </Router>
   );
 }
