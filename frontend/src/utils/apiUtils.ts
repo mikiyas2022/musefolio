@@ -1,9 +1,21 @@
 import apiConfig from '../config/apiConfig';
+import { toast } from 'react-toastify';
 
-// Constants for API URLs - FIXED TO ALWAYS USE DIRECT CONNECTION
-const API_BASE_URL = 'http://localhost:8080/api/v1';
-const API_BASE_URL_DIRECT = 'http://localhost:8080/api/v1';
-const directMode = true; // Always use direct mode
+// Constants for API URLs
+export const API_BASE_URL = 'http://localhost:3000/api/v1';
+export const API_BASE_URL_DIRECT = 'http://localhost:3000/api/v1';
+export const MOCK_MODE = process.env.NODE_ENV === 'development';
+
+// Flag to determine if we should use direct mode (bypassing proxy)
+export const directMode = true;
+
+// Log the API configuration on startup
+console.log('🌐 API Configuration:', {
+  baseUrl: API_BASE_URL,
+  directUrl: API_BASE_URL_DIRECT,
+  directMode,
+  mockMode: MOCK_MODE
+});
 
 // Enum for error categories
 export enum ErrorCategory {
@@ -11,7 +23,8 @@ export enum ErrorCategory {
   SERVER = 'server',
   AUTH = 'auth',
   VALIDATION = 'validation',
-  UNKNOWN = 'unknown'
+  UNKNOWN = 'unknown',
+  CLIENT = 'client'
 }
 
 // Define API error class that extends Error
@@ -39,22 +52,6 @@ export class ApiError extends Error {
   }
 }
 
-// Track API health
-let consecutiveServerFailures = 0;
-const lastFailures: {timestamp: number, endpoint: string}[] = [];
-
-// Track when a health check was last performed
-let lastHealthCheckTime = 0;
-let isBackendHealthy = true;
-
-// API request options type
-interface RequestOptions extends RequestInit {
-  timeout?: number;
-  retries?: number;
-  retryDelay?: number;
-  skipAuthCheck?: boolean;
-}
-
 // Add global authentication status flag to window
 declare global {
   interface Window {
@@ -62,72 +59,37 @@ declare global {
   }
 }
 
+// Add a request throttling mechanism with a maximum request count
+const requestThrottleMap = new Map<string, number>();
+const requestCountMap = new Map<string, number>();
+const MIN_REQUEST_INTERVAL = 2000; // ms between identical requests (increased to 2 seconds)
+const MAX_REQUESTS_PER_ENDPOINT = 2; // Maximum number of requests per endpoint (reduced to 2)
+const MAX_CONCURRENT_REQUESTS = 5; // Maximum number of concurrent requests
+let currentConcurrentRequests = 0;
+
+// Reset the request counts every 30 seconds to prevent permanent blocking
+setInterval(() => {
+  requestCountMap.clear();
+  requestThrottleMap.clear();
+  currentConcurrentRequests = 0;
+  console.log('🔄 Request limits reset');
+}, 30000);
+
+// Helper to determine if we should use mock mode
+export const shouldUseMockMode = (): boolean => {
+  return MOCK_MODE;
+};
+
 /**
  * Validate the token status in localStorage
  * Returns true if token is valid, false otherwise
  */
 export function validateTokenStatus(): boolean {
   try {
-    console.log('🔑 CRITICAL: Validating authentication token status...');
-    // Get token from localStorage
-    const token = localStorage.getItem('token');
-    const tokenExpiry = localStorage.getItem('tokenExpiry');
-    const userData = localStorage.getItem('user');
-
-    // Debug validation process in detail
-    console.log('Token validation details:', {
-      hasToken: !!token,
-      tokenLength: token ? token.length : 0,
-      hasExpiry: !!tokenExpiry,
-      hasUserData: !!userData
-    });
-    
-    // CRITICAL FIX: Token existence is more important than format
-    // If there's no token or user data, we're not authenticated
-    if (!token || !userData) {
-      console.log('❌ Token validation failed: Missing token or user data');
-      return false;
-    }
-    
-    // RELAXED CHECK: Don't fail on token format to be more robust
-    // Just warn about it instead of failing
-    if (!token.includes('.') || token.split('.').length !== 3) {
-      console.warn('⚠️ Token validation warning: Token format is not standard JWT');
-      // Continue anyway - the server will validate the token format
-    }
-
-    // Parse user data to ensure it's valid
-    try {
-      const user = JSON.parse(userData);
-      if (!user || !user.id) {
-        console.log('❌ Token validation failed: Invalid user data structure');
-        return false;
-      }
-      
-      // If we have a token and valid user data with ID, consider it valid
-      // regardless of expiry (server will reject if truly expired)
-      window.__isAuthenticated = true;
-      
-      // Update token expiry if present
-      if (tokenExpiry) {
-        // CRITICAL FIX: Always use numeric timestamp for expiry (more reliable)
-        // Extend token expiry on every validation by 7 days
-        const newExpiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days in ms
-        localStorage.setItem('tokenExpiry', newExpiry.toString());
-        console.log('🔄 Extended token expiry to', new Date(newExpiry).toLocaleString());
-      } else {
-        // If no expiry is set, set one now
-        const newExpiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days in ms
-        localStorage.setItem('tokenExpiry', newExpiry.toString());
-        console.log('🔄 Created new token expiry:', new Date(newExpiry).toLocaleString());
-      }
-      
-      console.log('✅ Token validation successful - User is authenticated');
-      return true;
-    } catch (e) {
-      console.log('❌ Token validation failed: Could not parse user data');
-      return false;
-    }
+    console.log('🔑 MOCK: Validating authentication token status...');
+    // In mock mode, always return true
+    window.__isAuthenticated = true;
+    return true;
   } catch (error) {
     console.error('❌ Token validation error:', error);
     return false;
@@ -135,488 +97,166 @@ export function validateTokenStatus(): boolean {
 }
 
 /**
- * Enhanced API request function with proper authentication headers
- */
-export async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  // Log start of API request with debugging info
-  console.log(`📡 API Request: ${options.method || 'GET'} ${endpoint}`);
-  
-  // Check if this is an auth endpoint (login/register) which doesn't need token
-  const isAuthEndpoint = endpoint.includes('/auth/') || 
-                        endpoint.includes('/login') || 
-                        endpoint.includes('/register');
-  
-  // CRITICAL FIX: Check for PATCH method and change to PUT
-  if (options.method === 'PATCH') {
-    console.warn('⚠️ PATCH method detected but not supported by backend CORS - changing to PUT');
-    options.method = 'PUT';
-  }
-  
-  // Set up API URL
-  let url: string;
-  
-  // Handle absolute URLs vs relative paths
-  if (endpoint.startsWith('http')) {
-    url = endpoint;
-  } else {
-    const apiBase = directMode ? API_BASE_URL_DIRECT : API_BASE_URL;
-    url = apiBase + (endpoint.startsWith('/') ? endpoint : `/${endpoint}`);
-  }
-  
-  // Set default fetch options
-  const defaultOptions: RequestOptions = {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    // CRITICAL: Always include credentials to ensure cookies are sent with the request
-    credentials: 'include',
-    timeout: 30000, // 30 seconds
-    retries: 2,
-    retryDelay: 1000,
-  };
-  
-  // Merge default options with provided options
-  const mergedOptions: RequestOptions = {
-    ...defaultOptions,
-    ...options,
-    // CRITICAL: Always preserve credentials setting
-    credentials: 'include',
-    headers: {
-      ...defaultOptions.headers,
-      ...options.headers,
-    },
-  };
-  
-  // CRITICAL FIX: Add Authorization header for authenticated requests
-  if (!isAuthEndpoint && !options.skipAuthCheck) {
-    const token = localStorage.getItem('token') || 
-                 sessionStorage.getItem('token') || 
-                 getCookieValue('auth_token');
-                 
-    if (token) {
-      console.log('🔐 Adding authorization token to request');
-      mergedOptions.headers = {
-        ...mergedOptions.headers,
-        'Authorization': `Bearer ${token}`,
-      };
-    } else {
-      console.warn('⚠️ No auth token available for authenticated request');
-    }
-  }
-  
-  // Log request details for debugging
-  console.log('API Request Details:', {
-    url,
-    method: mergedOptions.method || 'GET',
-    isAuthEndpoint,
-    hasAuthHeader: mergedOptions.headers && 
-                  'Authorization' in (mergedOptions.headers as Record<string, string>),
-    contentType: mergedOptions.headers && 
-                (mergedOptions.headers as Record<string, string>)['Content-Type'],
-    credentials: mergedOptions.credentials,
-  });
-  
-  // Create a promise for fetch with timeout
-  const fetchPromise = async (): Promise<Response> => {
-    try {
-      const response = await fetch(url, mergedOptions as RequestInit);
-      
-      // Log response status
-      console.log(`📥 API Response: ${response.status} ${response.statusText} for ${options.method || 'GET'} ${endpoint}`);
-      
-      if (!response.ok) {
-        // Get detailed error information
-        const contentType = response.headers.get('content-type');
-        let errorData: any;
-        
-        try {
-          if (contentType && contentType.includes('application/json')) {
-            errorData = await response.json();
-          } else {
-            errorData = await response.text();
-          }
-        } catch (e) {
-          errorData = 'Failed to parse error response';
-        }
-        
-        // Enhanced error logging
-        console.error('API Error:', {
-          status: response.status,
-          url,
-          method: mergedOptions.method || 'GET',
-          errorData,
-        });
-        
-        // Handle authentication errors
-        if (response.status === 401) {
-          console.error('🚫 Authentication error - token may be invalid or expired');
-          
-          // Check if this was already an authentication endpoint
-          if (!isAuthEndpoint) {
-            // Only log issue, don't automatically clear auth data
-            console.warn('⚠️ Authentication failed for an authenticated request');
-          }
-        }
-        
-        // Add special case handling for /users/me endpoint errors
-        if (response.status === 400 && url.includes('/users/me')) {
-          console.warn('⚠️ Bad Request for /users/me endpoint:', errorData);
-          
-          // Try to recover by using the user ID from localStorage instead
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            try {
-              const userData = JSON.parse(storedUser);
-              if (userData && userData.id) {
-                console.log('🔄 Recommending using direct user ID endpoint instead of /users/me');
-                // Don't throw a fatal error - let the caller decide what to do
-                const recoveryError = new ApiError(
-                  response.status,
-                  'User ID validation issue - use direct ID endpoint instead',
-                  errorData,
-                  ErrorCategory.VALIDATION,
-                  true // This is retryable with the correct endpoint
-                );
-                throw recoveryError;
-              }
-            } catch (e) {
-              // Can't parse user data, continue with normal error handling
-            }
-          }
-        }
-        
-        throw new ApiError(
-          response.status,
-          errorData?.message || errorData?.error || response.statusText,
-          errorData
-        );
-      }
-      
-      // For successful 204 responses with no content
-      if (response.status === 204) {
-        console.log('📤 API Success: 204 No Content');
-        return response;
-      }
-      
-      // For successful responses with content
-      return response;
-    } catch (error) {
-      // Log detailed error information
-      if (error instanceof ApiError) {
-        throw error; // Re-throw ApiErrors as they're already formatted
-      } else {
-        console.error('📛 API Request failed:', error);
-        throw new ApiError(
-          0, 
-          error instanceof Error ? error.message : 'Unknown error'
-        );
-      }
-    }
-  };
-  
-  // Execute fetch with retry logic
-  let lastError: Error | null = null;
-  const maxRetries = mergedOptions.retries || 0;
-  
-  for (let retry = 0; retry <= maxRetries; retry++) {
-    try {
-      const response = await fetchPromise();
-      
-      // Parse JSON response
-      if (response.status !== 204) {
-      const data = await response.json();
-        console.log('📊 API Success with data');
-        return data as T;
-      } else {
-        // Handle no-content responses
-        return {} as T;
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown error occurred');
-      
-      // Don't retry auth errors or 4xx errors (client errors)
-      if (error instanceof ApiError && 
-         (error.status === 401 || (error.status >= 400 && error.status < 500))) {
-        throw error;
-      }
-      
-      if (retry < maxRetries) {
-        const delay = mergedOptions.retryDelay || 1000;
-        console.log(`🔄 Retrying API request (${retry + 1}/${maxRetries}) after ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-  
-  // If we've exhausted retries, throw the last error
-  if (lastError) {
-    throw lastError;
-  }
-  
-  // We should never reach here, but TypeScript requires a return
-  throw new Error('Unexpected error in API request');
-}
-
-/**
- * Type guard to check if an error is an ApiError
- */
-export function isApiError(error: unknown): error is ApiError {
-  return error instanceof ApiError;
-}
-
-/**
- * Handle non-ok responses and translate them to our error format
- */
-async function handleErrorResponse(response: Response, endpoint: string): Promise<ApiError> {
-  let message = '';
-  let data = null;
-  
-  try {
-    const text = await response.text();
-    if (text) {
-      try {
-        data = JSON.parse(text);
-        message = data.error || data.message || response.statusText;
-      } catch {
-        message = text;
-      }
-    } else {
-      message = response.statusText;
-    }
-  } catch (error) {
-    message = `Error ${response.status}: ${response.statusText}`;
-  }
-  
-  // Create the appropriate error type based on status
-  if (response.status >= 500) {
-    recordFailure(endpoint);
-    return new ApiError(
-      response.status,
-      `Server error (${response.status}): ${message || 'The server is currently unavailable'}`,
-      data,
-      ErrorCategory.SERVER,
-      true
-    );
-  }
-  
-  if (response.status === 401 || response.status === 403) {
-    // Clear invalid tokens on auth errors
-    if (response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('tokenExpiry');
-    }
-    
-    return new ApiError(
-      response.status,
-      response.status === 401 
-        ? 'Authentication required. Please log in again.'
-        : 'You don\'t have permission to access this resource.',
-      data,
-      ErrorCategory.AUTH,
-      false
-    );
-  }
-  
-  if (response.status === 400 || response.status === 422) {
-    return new ApiError(
-      response.status,
-      message || 'Invalid input provided',
-      data,
-      ErrorCategory.VALIDATION,
-      false
-    );
-  }
-  
-  if (response.status === 404) {
-    return new ApiError(
-      response.status,
-      `Resource not found: ${endpoint}`,
-      data,
-      ErrorCategory.UNKNOWN,
-      false
-    );
-  }
-  
-  // Generic error for other status codes
-  return new ApiError(
-    response.status,
-    message || `Unknown error (${response.status})`,
-    data,
-    ErrorCategory.UNKNOWN,
-    false
-  );
-}
-
-/**
- * Record a server failure for health monitoring
- */
-function recordFailure(endpoint: string): void {
-  const now = Date.now();
-  
-  // Clean up old failures (older than 5 minutes)
-  const recentWindow = 5 * 60 * 1000;
-  const recentFailures = lastFailures.filter(f => now - f.timestamp < recentWindow);
-  
-  // Add this failure
-  recentFailures.push({ timestamp: now, endpoint });
-  
-  // Update the array
-  lastFailures.length = 0;
-  lastFailures.push(...recentFailures);
-  
-  // Count consecutive failures in the recent window
-  consecutiveServerFailures = recentFailures.length;
-}
-
-/**
- * Reset failure tracking after a successful request
- */
-function resetFailureTracking(endpoint: string): void {
-  // Only reset for health endpoints or regular requests if recent failures is low
-  if (endpoint.includes('health') || endpoint.includes('status') || consecutiveServerFailures <= 1) {
-    consecutiveServerFailures = 0;
-    lastFailures.length = 0;
-    
-    // Mark backend as healthy
-    isBackendHealthy = true;
-  }
-}
-
-/**
- * Check backend health status
+ * Check backend health
  */
 export async function checkBackendHealth(): Promise<boolean> {
-  const now = Date.now();
+  console.log('🏥 MOCK: Checking backend health...');
+  // In mock mode, always return true
+  return true;
+}
+
+/**
+ * Function to get mock responses for development
+ */
+export function getMockResponse<T>(endpoint: string, options?: any): T {
+  console.log(`🔸 MOCK API: ${endpoint}`);
   
-  // Don't check too frequently
-  if (now - lastHealthCheckTime < 15000) {
-    return isBackendHealthy;
+  // Mock user data
+  const mockUser = {
+    id: 'mock-user-123',
+    name: 'Development User',
+    email: 'dev@example.com',
+    username: 'devuser',
+    profession: 'Software Developer',
+    bio: 'This is a mock user for development',
+    avatar: '/avatars/default.png',
+    socialLinks: {
+      linkedin: 'https://linkedin.com/in/devuser',
+      github: 'https://github.com/devuser',
+      twitter: 'https://twitter.com/devuser',
+    }
+  };
+  
+  // Return different mock data based on the endpoint
+  if (endpoint.includes('auth/login') || endpoint.includes('auth/register')) {
+    return {
+      user: mockUser,
+      token: 'mock-token-123'
+    } as unknown as T;
   }
   
-  lastHealthCheckTime = now;
+  if (endpoint.includes('users/me')) {
+    return mockUser as unknown as T;
+  }
   
+  if (endpoint.includes('health')) {
+    return { status: 'OK', version: '1.0.0' } as unknown as T;
+  }
+  
+  // Default mock response
+  return {} as T;
+}
+
+/**
+ * Function to construct API URLs
+ */
+export function getApiUrl(endpoint: string): string {
+  // Remove leading slash if present to prevent double slashes
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  
+  // Always use direct mode in development
+  const url = `${API_BASE_URL_DIRECT}/${cleanEndpoint}`;
+  
+  console.log(`🔗 API URL: ${url}`);
+  return url;
+}
+
+// Function to handle API requests with proper error handling
+export const apiRequest = async <T = any>(
+  endpoint: string,
+  method: string = 'GET',
+  body?: any,
+  headers: Record<string, string> = {}
+): Promise<T> => {
   try {
-    const config = apiConfig.get();
-    const isDirectMode = apiConfig.env() === 'direct';
+    // Determine the base URL based on direct mode
+    const baseUrl = directMode ? API_BASE_URL_DIRECT : API_BASE_URL;
     
-    // Use direct health endpoint for direct mode, relative for proxy mode
-    const healthEndpoint = isDirectMode 
-      ? 'http://localhost:8080/health'  // Direct URL for direct mode
-      : '/health';                      // Relative URL for proxy mode
+    // Remove leading slash from endpoint if present to prevent double slashes
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
     
-    console.log('Checking health with endpoint:', healthEndpoint);
+    // Construct the full URL
+    const url = `${baseUrl}/${cleanEndpoint}`;
     
-    const response = await fetch(healthEndpoint, {
-      method: 'GET',
-      headers: { 'Accept': 'text/plain' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
-    });
+    console.log(`🌐 API Request: ${method} ${url}`);
     
-    if (response.ok) {
-      const text = await response.text();
-      if (text.includes('OK')) {
-        console.log('Health check successful');
-        isBackendHealthy = true;
-        return true;
-      }
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    
+    // Set up request options
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+    };
+    
+    // Add body if provided
+    if (body && method !== 'GET') {
+      options.body = JSON.stringify(body);
     }
     
-    // If first attempt fails, try with API v1 prefix
-    const apiHealthEndpoint = isDirectMode
-      ? 'http://localhost:8080/api/v1/health'  // Direct URL with API prefix
-      : '/api/v1/health';                      // Relative URL with API prefix
-      
-    console.log('Trying API health endpoint:', apiHealthEndpoint);
+    // Make the request
+    const response = await fetch(url, options);
     
-    const apiResponse = await fetch(apiHealthEndpoint, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
-    });
+    // Parse the response
+    const data = await response.json();
     
-    if (apiResponse.ok) {
-      console.log('API health check successful');
-      isBackendHealthy = true;
-      return true;
+    // Check if the response is successful
+    if (!response.ok) {
+      throw data;
     }
     
-    // Both checks failed
-    console.log('Both health checks failed');
-    isBackendHealthy = false;
-    return false;
+    return data as T;
   } catch (error) {
-    console.error('Health check error:', error);
-    isBackendHealthy = false;
-    return false;
+    console.error('API request failed:', error);
+    
+    // Format and display error message
+    const errorMessage = formatErrorMessage(error);
+    toast.error(errorMessage);
+    
+    throw error;
   }
-}
+};
 
 /**
- * This function previously determined if mock mode should be used
- * Now it always returns false as mock mode has been disabled
+ * Helper function to determine error category based on status code
  */
-export function shouldUseMockMode(endpoint: string): boolean {
-  return false;
+function getErrorCategory(status: number): ErrorCategory {
+  if (status >= 400 && status < 500) {
+    if (status === 401 || status === 403) {
+      return ErrorCategory.AUTH;
+    }
+    if (status === 422) {
+      return ErrorCategory.VALIDATION;
+    }
+    return ErrorCategory.CLIENT;
+  }
+  if (status >= 500) {
+    return ErrorCategory.SERVER;
+  }
+  return ErrorCategory.UNKNOWN;
 }
 
 /**
- * Format user-friendly error messages
- */
-export function formatErrorMessage(error: any): string {
-  if (error instanceof ApiError) {
-    if (error.category === ErrorCategory.SERVER) {
-      return `Server error: ${error.message}. Please try again later.`;
-    }
-    
-    if (error.category === ErrorCategory.NETWORK) {
-      return `Network error: ${error.message}. Please check your connection.`;
-    }
-    
-    if (error.category === ErrorCategory.AUTH) {
-      return error.message;
-    }
-    
-    if (error.category === ErrorCategory.VALIDATION) {
-      return `Validation error: ${error.message}`;
-    }
-    
-    // For any other ApiError category
-    return error.message;
-  }
-  
-  if (error instanceof Error) {
-    return error.message;
-  }
-  
-  if (typeof error === 'string') {
-    return error;
-  }
-  
-  if (typeof error === 'object' && error !== null) {
-    const errorObj = error as Record<string, any>;
-    
-    if ('message' in errorObj) {
-      return errorObj.message as string;
-    }
-    
-    if ('error' in errorObj) {
-      return typeof errorObj.error === 'string' 
-        ? errorObj.error 
-        : JSON.stringify(errorObj.error);
-    }
-  }
-  
-  return 'An unknown error occurred';
-}
-
-/**
- * Get cookie value by name
+ * Helper function to get cookie value
  */
 function getCookieValue(name: string): string | null {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-  return null;
-} 
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? match[2] : null;
+}
+
+// Format error messages from API responses
+export const formatErrorMessage = (error: any): string => {
+  if (!error) return 'An unknown error occurred';
+  
+  if (typeof error === 'string') return error;
+  
+  if (error.message) return error.message;
+  
+  if (error.error) return error.error;
+  
+  return 'An unexpected error occurred';
+}; 

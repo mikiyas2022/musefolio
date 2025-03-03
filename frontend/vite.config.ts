@@ -7,32 +7,44 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true, // Listen on all addresses
+    strictPort: true, // Fail if port is already in use
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path
       },
       '/health': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        secure: false
-      },
-      '/media': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
-      }
+      },
+      '/media': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
     fs: {
       strict: false,
       allow: ['..'],
     }
   },
-  define: {
-    global: 'window',
+  // Ensure static assets are properly handled
+  publicDir: path.resolve(__dirname, './public'),
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    // Copy all files from public directory
+    copyPublicDir: true,
+    // Generate sourcemaps for easier debugging
+    sourcemap: true,
+    rollupOptions: {
+      external: ['immutable']
+    }
   },
+  // Resolve aliases for cleaner imports
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -45,9 +57,7 @@ export default defineConfig({
     exclude: ['immutable'],
     include: ['react-draft-wysiwyg']
   },
-  build: {
-    rollupOptions: {
-      external: ['immutable']
-    }
-  }
+  define: {
+    global: 'window',
+  },
 })
